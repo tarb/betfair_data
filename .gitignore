@@ -1,0 +1,8 @@
+/target
+/data
+
+*.tar
+*.exe
+*.txt
+*.rs_ignore
+**/.DS_Store
