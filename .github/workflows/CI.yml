@@ -22,7 +22,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2022-01-21
           target: aarch64-apple-darwin
           profile: minimal
           default: true
@@ -74,7 +74,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: nightly
+          toolchain: nightly-2022-01-21
           profile: minimal
           default: true
       - name: Build
@@ -112,7 +112,7 @@ jobs:
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: nightly-2022-01-21
         profile: minimal
         default: true
     - name: Build
@@ -251,7 +251,7 @@ jobs:
     - name: Install Rust toolchain
       uses: actions-rs/toolchain@v1
       with:
-        toolchain: nightly
+        toolchain: nightly-2022-01-21
         profile: minimal
         default: true
     - uses: actions/setup-python@v2
