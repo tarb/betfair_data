@@ -31,7 +31,7 @@ jobs:
           args: --release --out dist
       - name: Install built wheel - x86_64
         run: |
-          pip install rjmespath --no-index --find-links dist --force-reinstall
+          pip install betfair_data --no-index --find-links dist --force-reinstall
 
       - name: Build wheels - universal2
         uses: messense/maturin-action@v1
@@ -39,7 +39,7 @@ jobs:
           args: --release --universal2 --out dist --no-sdist
       - name: Install built wheel - universal2
         run: |
-          pip install rjmespath --no-index --find-links dist --force-reinstall
+          pip install betfair_data --no-index --find-links dist --force-reinstall
 
       - name: Upload wheels
         uses: actions/upload-artifact@v2
@@ -71,7 +71,7 @@ jobs:
           args: --release --out dist --no-sdist
       - name: Install built wheel
         run: |
-          pip install rjmespath --no-index --find-links dist --force-reinstall
+          pip install betfair_data --no-index --find-links dist --force-reinstall
 
       - name: Upload wheels
         uses: actions/upload-artifact@v2
@@ -100,9 +100,8 @@ jobs:
     - name: Install built wheel
       if: matrix.target == 'x86_64'
       run: |
-        pip install rjmespath --no-index --find-links dist --force-reinstall
-        pip install pytest
-        cd tests && pytest
+        pip install betfair_data --no-index --find-links dist --force-reinstall
+
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -142,7 +141,7 @@ jobs:
           pip3 install -U pip pytest
         run: |
           ls -lrth /artifacts
-          pip3 install rjmespath --no-index --find-links /artifacts --force-reinstall
+          pip3 install betfair_data --no-index --find-links /artifacts --force-reinstall
 
     - name: Upload wheels
       uses: actions/upload-artifact@v2
