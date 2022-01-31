@@ -1,6 +1,6 @@
 /target
 /data
-/.env
+/.venv
 /dist
 
 *.tar
