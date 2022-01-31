@@ -1,6 +1,7 @@
 /target
 /data
 /.env
+/dist
 
 *.tar
 *.exe
