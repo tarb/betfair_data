@@ -1,4 +1,5 @@
 # Betfair Data
+
 Betfair Data is a fast Betfair historical data file parsing library for python. It currently supports tar archives containing BZ2 compressed NLJSON files.
 
 ## Installation
