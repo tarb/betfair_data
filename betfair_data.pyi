@@ -76,9 +76,7 @@ class Market(MarketImage):
         """ Update the market with the next delta
 
         Example:
-            >>> from pyheck import shouty_kebab_many
-            >>> shouty_kebab_many(["We are going", "to inherit the earth."])
-            ['WE-ARE-GOING', 'TO-INHERIT-THE-EARTH']
+            >>> market.update()
         """  
     def copy(self) -> MarketImage:
         """ 
@@ -117,7 +115,7 @@ class PriceSize():
     price: float
     size: float
 
-class Sources(Iterator[Market]):
+class TarBz2(Iterator[Market]):
     """"""
-    def __init__(self, paths: Sequence[str]) -> None:
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None:
         """"""

@@ -1,16 +1,16 @@
+use crossbeam_channel::{bounded, Receiver};
 use std::fs::File;
-use std::thread;
+use std::io::Error;
 use std::io::Read;
-use std::io::{Error};
-use crossbeam_channel::{bounded, Receiver };
-use tar::Archive; 
+use std::thread;
+use tar::Archive;
 // use bzip2_rs::decoder::DecoderReader;
 use bzip2_rs::decoder::ParallelDecoderReader;
 
-use crate::{SourceItem, IOErr};
+use crate::{IOErr, MarketSource, SourceItem};
 
 pub struct TarBzSource {
-    pub source: String,
+    source: String,
     chan: Receiver<Result<TarEntry, (Error, Option<String>)>>,
 }
 
@@ -19,8 +19,13 @@ struct TarEntry {
     bs: Vec<u8>,
 }
 
-impl TarBzSource {
+impl MarketSource for TarBzSource {
+    fn source(&self) -> &str {
+        &self.source
+    }
+}
 
+impl TarBzSource {
     pub fn new<S: Into<String>>(path: S) -> Result<Self, Error> {
         let path = path.into();
         let (data_send, data_recv) = bounded(2);
@@ -33,15 +38,17 @@ impl TarBzSource {
                 .entries()?
                 .filter_map(|entry| entry.ok())
                 .filter_map(|entry| (entry.size() > 0).then_some(entry))
-                .map(| entry| {
+                .map(|entry| {
                     let mut buf = Vec::with_capacity(entry.size() as usize);
                     let name = String::from_utf8_lossy(entry.path_bytes().as_ref()).into_owned();
 
                     // DecoderReader::new(entry)
-                    let r = ParallelDecoderReader::new(entry, bzip2_rs::RayonThreadPool, 1024 * 1024).read_to_end(&mut buf);
-                    
+                    let r =
+                        ParallelDecoderReader::new(entry, bzip2_rs::RayonThreadPool, 1024 * 1024)
+                            .read_to_end(&mut buf);
+
                     match r {
-                        Ok(_) => Ok(TarEntry{bs: buf, name }),
+                        Ok(_) => Ok(TarEntry { bs: buf, name }),
                         Err(err) => Err((err, Some(name))),
                     }
                 })
@@ -59,18 +66,17 @@ impl TarBzSource {
 
 impl Iterator for TarBzSource {
     type Item = Result<SourceItem, IOErr>;
-    
+
     fn next(&mut self) -> Option<Self::Item> {
-        self.chan.recv()
-            .ok()
-            .and_then(|r| {
-                let r = match r {
-                    Ok(entry) => Ok(SourceItem::new(self.source.clone(), entry.name, entry.bs)),
-                    Err((err, name)) => Err(IOErr{ file: name, err: err }),
-                };
-                Some(r)
-            })
+        self.chan.recv().ok().and_then(|r| {
+            let r = match r {
+                Ok(entry) => Ok(SourceItem::new(self.source.clone(), entry.name, entry.bs)),
+                Err((err, name)) => Err(IOErr {
+                    file: name,
+                    err: err,
+                }),
+            };
+            Some(r)
+        })
     }
 }
-
-

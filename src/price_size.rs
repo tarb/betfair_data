@@ -1,10 +1,10 @@
-use std::fmt;
-use std::cmp::Ordering;
-use pyo3::{prelude::*, PyObjectProtocol}; 
-use serde::{ 
-    Deserialize, Deserializer, 
-    de::{ SeqAccess, MapAccess, Visitor, Error, DeserializeSeed },
+use pyo3::{prelude::*, PyObjectProtocol};
+use serde::{
+    de::{DeserializeSeed, Error, MapAccess, SeqAccess, Visitor},
+    Deserialize, Deserializer,
 };
+use std::cmp::Ordering;
+use std::fmt;
 
 const MIN_VEC_CAP: usize = 20;
 
@@ -65,7 +65,10 @@ impl<'de> Deserialize<'de> for F64OrStr {
             type Value = F64OrStr;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                write!(formatter, "a f64 or a string containing digits, NaN or Infinity")
+                write!(
+                    formatter,
+                    "a f64 or a string containing digits, NaN or Infinity"
+                )
             }
 
             fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E> {
@@ -75,7 +78,7 @@ impl<'de> Deserialize<'de> for F64OrStr {
             fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E> {
                 Ok(F64OrStr(v as f64))
             }
-            
+
             fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E> {
                 Ok(F64OrStr(v))
             }
@@ -84,7 +87,10 @@ impl<'de> Deserialize<'de> for F64OrStr {
                 match s {
                     "NaN" => Ok(F64OrStr(f64::NAN)),
                     "Infinity" => Ok(F64OrStr(f64::INFINITY)),
-                    _ => s.parse().map_err(|_| Error::custom("invalid PriceSize string value")).map(|v| F64OrStr(v)),
+                    _ => s
+                        .parse()
+                        .map_err(|_| Error::custom("invalid PriceSize string value"))
+                        .map(|v| F64OrStr(v)),
                 }
             }
         }
@@ -101,34 +107,39 @@ impl<'de> Deserialize<'de> for PriceSize {
         struct PriceSizeVisitor;
         impl<'de> Visitor<'de> for PriceSizeVisitor {
             type Value = PriceSize;
-         
+
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a tuple in the form [price, size], eg [2.04,234.1] or a object in the form {\"price\":2.04,\"size\":234.1}")
             }
-        
+
             fn visit_seq<V>(self, mut seq: V) -> Result<Self::Value, V::Error>
             where
                 V: SeqAccess<'de>,
             {
-                let price: F64OrStr = seq.next_element()?
+                let price: F64OrStr = seq
+                    .next_element()?
                     .ok_or_else(|| Error::invalid_length(0, &self))?;
-                let size: F64OrStr = seq.next_element()?
+                let size: F64OrStr = seq
+                    .next_element()?
                     .ok_or_else(|| Error::invalid_length(1, &self))?;
-                
+
                 Ok(PriceSize::new(price.0, size.0))
             }
-        
+
             fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
             where
                 V: MapAccess<'de>,
             {
-                #[derive(Debug,Deserialize)]
+                #[derive(Debug, Deserialize)]
                 #[serde(field_identifier, rename_all = "camelCase")]
-                enum Field { Price, Size }
+                enum Field {
+                    Price,
+                    Size,
+                }
 
                 let mut price: Option<F64OrStr> = None;
                 let mut size: Option<F64OrStr> = None;
-        
+
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Price => {
@@ -145,13 +156,13 @@ impl<'de> Deserialize<'de> for PriceSize {
                         }
                     }
                 }
-                
+
                 let price = price.ok_or_else(|| Error::missing_field(FIELDS[0]))?;
                 let size = size.ok_or_else(|| Error::missing_field(FIELDS[1]))?;
                 Ok(PriceSize::new(price.0, size.0))
             }
         }
-        
+
         const FIELDS: &'static [&'static str] = &["price", "size"];
         deserializer.deserialize_struct("PriceSize", FIELDS, PriceSizeVisitor)
     }
@@ -172,7 +183,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeBackLadder<'a> {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                A: serde::de::SeqAccess<'de>, 
+                A: serde::de::SeqAccess<'de>,
             {
                 // grow an empty vec
                 if self.0.capacity() == 0 {
@@ -183,7 +194,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeBackLadder<'a> {
                 }
 
                 while let Some(ps1) = seq.next_element::<PriceSize>()? {
-                    let cmp_fn =  |ps2: &PriceSize| {
+                    let cmp_fn = |ps2: &PriceSize| {
                         if ps1.price < ps2.price {
                             Ordering::Greater
                         } else if ps1.price > ps2.price {
@@ -196,8 +207,10 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeBackLadder<'a> {
                     if ps1.size == 0.0 {
                         // removing price
                         match self.0.binary_search_by(cmp_fn) {
-                            Ok(index) => { self.0.remove(index); },
-                            Err(_err) => {},
+                            Ok(index) => {
+                                self.0.remove(index);
+                            }
+                            Err(_err) => {}
                         }
                     } else {
                         match self.0.binary_search_by(cmp_fn) {
@@ -216,7 +229,6 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeBackLadder<'a> {
         Ok(deserializer.deserialize_seq(PSVisitor(self.0))?)
     }
 }
-
 
 pub struct PriceSizeLayLadder<'a>(pub &'a mut Vec<PriceSize>);
 impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
@@ -233,7 +245,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                A: serde::de::SeqAccess<'de>, 
+                A: serde::de::SeqAccess<'de>,
             {
                 // grow an empty vec
                 if self.0.capacity() == 0 {
@@ -244,7 +256,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
                 }
 
                 while let Some(ps1) = seq.next_element::<PriceSize>()? {
-                    let cmp_fn =  |ps2: &PriceSize| {
+                    let cmp_fn = |ps2: &PriceSize| {
                         if ps1.price < ps2.price {
                             Ordering::Less
                         } else if ps1.price > ps2.price {
@@ -257,8 +269,10 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
                     if ps1.size == 0.0 {
                         // removing price
                         match self.0.binary_search_by(cmp_fn) {
-                            Ok(index) => { self.0.remove(index); },
-                            Err(_err) => {},
+                            Ok(index) => {
+                                self.0.remove(index);
+                            }
+                            Err(_err) => {}
                         }
                     } else {
                         match self.0.binary_search_by(cmp_fn) {
@@ -277,8 +291,6 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
         Ok(deserializer.deserialize_seq(PSVisitor(self.0))?)
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -328,109 +340,146 @@ mod tests {
             [[3.0, 3],[2.3, 3],[2.9, 3],[2.4, 3],[2.8, 3],[2.5, 3],[2.7, 3],[2.6, 3],[3.1, 3]]
         "#;
         let mut deser = serde_json::Deserializer::from_str(raw);
-        
+
         let mut ps: Vec<PriceSize> = Vec::new();
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps.capacity(), MIN_VEC_CAP);        
-        assert_eq!(ps, vec![
-            PriceSize::new(2.0,5.0),
-            PriceSize::new(3.0,5.0),
-            PriceSize::new(4.0,5.0),
-            PriceSize::new(5.0,5.0),
-            PriceSize::new(6.0,5.0),
-        ]);
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(ps.capacity(), MIN_VEC_CAP);
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(2.0, 5.0),
+                PriceSize::new(3.0, 5.0),
+                PriceSize::new(4.0, 5.0),
+                PriceSize::new(5.0, 5.0),
+                PriceSize::new(6.0, 5.0),
+            ]
+        );
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(1.25,4.0),
-            PriceSize::new(1.5,4.0),
-            PriceSize::new(2.0,5.0),
-            PriceSize::new(2.5,4.0),
-            PriceSize::new(3.0,5.0),
-            PriceSize::new(3.5,4.0),
-            PriceSize::new(4.0,5.0),
-            PriceSize::new(5.0,5.0),
-            PriceSize::new(6.0,5.0),
-            PriceSize::new(7.0,4.0),
-        ]);
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(1.25, 4.0),
+                PriceSize::new(1.5, 4.0),
+                PriceSize::new(2.0, 5.0),
+                PriceSize::new(2.5, 4.0),
+                PriceSize::new(3.0, 5.0),
+                PriceSize::new(3.5, 4.0),
+                PriceSize::new(4.0, 5.0),
+                PriceSize::new(5.0, 5.0),
+                PriceSize::new(6.0, 5.0),
+                PriceSize::new(7.0, 4.0),
+            ]
+        );
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(2.0,5.0),
-            PriceSize::new(2.5,4.0),
-            PriceSize::new(3.0,5.0),
-            PriceSize::new(3.5,4.0),
-            PriceSize::new(4.0,5.0),
-            PriceSize::new(6.0,5.0),
-        ]);
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(2.0, 5.0),
+                PriceSize::new(2.5, 4.0),
+                PriceSize::new(3.0, 5.0),
+                PriceSize::new(3.5, 4.0),
+                PriceSize::new(4.0, 5.0),
+                PriceSize::new(6.0, 5.0),
+            ]
+        );
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(2.0,1.0),
-            PriceSize::new(3.0,1.0),
-            PriceSize::new(4.0,1.0),
-            PriceSize::new(5.0,1.0),
-            PriceSize::new(6.0,5.0),
-        ]);
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(2.0, 1.0),
+                PriceSize::new(3.0, 1.0),
+                PriceSize::new(4.0, 1.0),
+                PriceSize::new(5.0, 1.0),
+                PriceSize::new(6.0, 5.0),
+            ]
+        );
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         assert!(ps.is_empty());
-        
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(1.1,6.0),
-            PriceSize::new(1.2,5.0),
-            PriceSize::new(1.3,4.0),
-            PriceSize::new(1.4,3.0),
-            PriceSize::new(1.5,2.0),
-            PriceSize::new(1.6,1.0),
-        ]);
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(1.1, 6.0),
+                PriceSize::new(1.2, 5.0),
+                PriceSize::new(1.3, 4.0),
+                PriceSize::new(1.4, 3.0),
+                PriceSize::new(1.5, 2.0),
+                PriceSize::new(1.6, 1.0),
+            ]
+        );
+
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         assert!(ps.capacity() == MIN_VEC_CAP);
-        assert_eq!(ps, vec![
-            PriceSize::new(1.1,6.0),
-            PriceSize::new(1.2,5.0),
-            PriceSize::new(1.3,4.0),
-            PriceSize::new(1.4,3.0),
-            PriceSize::new(1.5,2.0),
-            PriceSize::new(1.6,1.0),
-            PriceSize::new(1.7,2.0),
-            PriceSize::new(1.8,2.0),
-            PriceSize::new(1.9,2.0),
-            PriceSize::new(2.0,2.0),
-            PriceSize::new(2.1,2.0),
-            PriceSize::new(2.2,2.0),
-        ]);
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(1.1, 6.0),
+                PriceSize::new(1.2, 5.0),
+                PriceSize::new(1.3, 4.0),
+                PriceSize::new(1.4, 3.0),
+                PriceSize::new(1.5, 2.0),
+                PriceSize::new(1.6, 1.0),
+                PriceSize::new(1.7, 2.0),
+                PriceSize::new(1.8, 2.0),
+                PriceSize::new(1.9, 2.0),
+                PriceSize::new(2.0, 2.0),
+                PriceSize::new(2.1, 2.0),
+                PriceSize::new(2.2, 2.0),
+            ]
+        );
 
-        PriceSizeBackLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
+        PriceSizeBackLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         assert!(ps.capacity() > MIN_VEC_CAP);
-        assert_eq!(ps, vec![
-            PriceSize::new(1.1,6.0),
-            PriceSize::new(1.2,5.0),
-            PriceSize::new(1.3,4.0),
-            PriceSize::new(1.4,3.0),
-            PriceSize::new(1.5,2.0),
-            PriceSize::new(1.6,1.0),
-            PriceSize::new(1.7,2.0),
-            PriceSize::new(1.8,2.0),
-            PriceSize::new(1.9,2.0),
-            PriceSize::new(2.0,2.0),
-            PriceSize::new(2.1,2.0),
-            PriceSize::new(2.2,2.0),
-            PriceSize::new(2.3,3.0),
-            PriceSize::new(2.4,3.0),
-            PriceSize::new(2.5,3.0),
-            PriceSize::new(2.6,3.0),
-            PriceSize::new(2.7,3.0),
-            PriceSize::new(2.8,3.0),
-            PriceSize::new(2.9,3.0),
-            PriceSize::new(3.0,3.0),
-            PriceSize::new(3.1,3.0),
-        ]);
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(1.1, 6.0),
+                PriceSize::new(1.2, 5.0),
+                PriceSize::new(1.3, 4.0),
+                PriceSize::new(1.4, 3.0),
+                PriceSize::new(1.5, 2.0),
+                PriceSize::new(1.6, 1.0),
+                PriceSize::new(1.7, 2.0),
+                PriceSize::new(1.8, 2.0),
+                PriceSize::new(1.9, 2.0),
+                PriceSize::new(2.0, 2.0),
+                PriceSize::new(2.1, 2.0),
+                PriceSize::new(2.2, 2.0),
+                PriceSize::new(2.3, 3.0),
+                PriceSize::new(2.4, 3.0),
+                PriceSize::new(2.5, 3.0),
+                PriceSize::new(2.6, 3.0),
+                PriceSize::new(2.7, 3.0),
+                PriceSize::new(2.8, 3.0),
+                PriceSize::new(2.9, 3.0),
+                PriceSize::new(3.0, 3.0),
+                PriceSize::new(3.1, 3.0),
+            ]
+        );
     }
-    
+
     #[test]
     fn test_lay_ladder_deserialize() {
         let raw = r#"
@@ -444,108 +493,143 @@ mod tests {
             [[3.0, 3],[2.3, 3],[2.9, 3],[2.4, 3],[2.8, 3],[2.5, 3],[2.7, 3],[2.6, 3],[3.1, 3]]
         "#;
         let mut deser = serde_json::Deserializer::from_str(raw);
-        
+
         let mut ps: Vec<PriceSize> = Vec::new();
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps.capacity(), MIN_VEC_CAP);        
-        assert_eq!(ps, vec![
-            PriceSize::new(6.0,5.0),
-            PriceSize::new(5.0,5.0),
-            PriceSize::new(4.0,5.0),
-            PriceSize::new(3.0,5.0),
-            PriceSize::new(2.0,5.0),
-        ]);
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(ps.capacity(), MIN_VEC_CAP);
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(6.0, 5.0),
+                PriceSize::new(5.0, 5.0),
+                PriceSize::new(4.0, 5.0),
+                PriceSize::new(3.0, 5.0),
+                PriceSize::new(2.0, 5.0),
+            ]
+        );
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(7.0,4.0),
-            PriceSize::new(6.0,5.0),
-            PriceSize::new(5.0,5.0),
-            PriceSize::new(4.0,5.0),
-            PriceSize::new(3.5,4.0),
-            PriceSize::new(3.0,5.0),
-            PriceSize::new(2.5,4.0),
-            PriceSize::new(2.0,5.0),
-            PriceSize::new(1.5,4.0),
-            PriceSize::new(1.25,4.0),
-        ]);
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(7.0, 4.0),
+                PriceSize::new(6.0, 5.0),
+                PriceSize::new(5.0, 5.0),
+                PriceSize::new(4.0, 5.0),
+                PriceSize::new(3.5, 4.0),
+                PriceSize::new(3.0, 5.0),
+                PriceSize::new(2.5, 4.0),
+                PriceSize::new(2.0, 5.0),
+                PriceSize::new(1.5, 4.0),
+                PriceSize::new(1.25, 4.0),
+            ]
+        );
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(6.0,5.0),
-            PriceSize::new(4.0,5.0),
-            PriceSize::new(3.5,4.0),
-            PriceSize::new(3.0,5.0),
-            PriceSize::new(2.5,4.0),
-            PriceSize::new(2.0,5.0),
-        ]);
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(6.0, 5.0),
+                PriceSize::new(4.0, 5.0),
+                PriceSize::new(3.5, 4.0),
+                PriceSize::new(3.0, 5.0),
+                PriceSize::new(2.5, 4.0),
+                PriceSize::new(2.0, 5.0),
+            ]
+        );
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(6.0,5.0),
-            PriceSize::new(5.0,1.0),
-            PriceSize::new(4.0,1.0),
-            PriceSize::new(3.0,1.0),
-            PriceSize::new(2.0,1.0),
-        ]);
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(6.0, 5.0),
+                PriceSize::new(5.0, 1.0),
+                PriceSize::new(4.0, 1.0),
+                PriceSize::new(3.0, 1.0),
+                PriceSize::new(2.0, 1.0),
+            ]
+        );
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         assert!(ps.is_empty());
-        
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
-        assert_eq!(ps, vec![
-            PriceSize::new(1.6,1.0),
-            PriceSize::new(1.5,2.0),
-            PriceSize::new(1.4,3.0),
-            PriceSize::new(1.3,4.0),
-            PriceSize::new(1.2,5.0),
-            PriceSize::new(1.1,6.0),
-        ]);
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(1.6, 1.0),
+                PriceSize::new(1.5, 2.0),
+                PriceSize::new(1.4, 3.0),
+                PriceSize::new(1.3, 4.0),
+                PriceSize::new(1.2, 5.0),
+                PriceSize::new(1.1, 6.0),
+            ]
+        );
+
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         assert!(ps.capacity() == MIN_VEC_CAP);
-        assert_eq!(ps, vec![
-            PriceSize::new(2.2,2.0),
-            PriceSize::new(2.1,2.0),
-            PriceSize::new(2.0,2.0),
-            PriceSize::new(1.9,2.0),
-            PriceSize::new(1.8,2.0),
-            PriceSize::new(1.7,2.0),
-            PriceSize::new(1.6,1.0),
-            PriceSize::new(1.5,2.0),
-            PriceSize::new(1.4,3.0),
-            PriceSize::new(1.3,4.0),
-            PriceSize::new(1.2,5.0),
-            PriceSize::new(1.1,6.0),
-        ]);
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(2.2, 2.0),
+                PriceSize::new(2.1, 2.0),
+                PriceSize::new(2.0, 2.0),
+                PriceSize::new(1.9, 2.0),
+                PriceSize::new(1.8, 2.0),
+                PriceSize::new(1.7, 2.0),
+                PriceSize::new(1.6, 1.0),
+                PriceSize::new(1.5, 2.0),
+                PriceSize::new(1.4, 3.0),
+                PriceSize::new(1.3, 4.0),
+                PriceSize::new(1.2, 5.0),
+                PriceSize::new(1.1, 6.0),
+            ]
+        );
 
-        PriceSizeLayLadder(&mut ps).deserialize(&mut deser).expect("failed to deserialize");
+        PriceSizeLayLadder(&mut ps)
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         assert!(ps.capacity() > MIN_VEC_CAP);
-        assert_eq!(ps, vec![
-            PriceSize::new(3.1,3.0),
-            PriceSize::new(3.0,3.0),
-            PriceSize::new(2.9,3.0),
-            PriceSize::new(2.8,3.0),
-            PriceSize::new(2.7,3.0),
-            PriceSize::new(2.6,3.0),
-            PriceSize::new(2.5,3.0),
-            PriceSize::new(2.4,3.0),
-            PriceSize::new(2.3,3.0),
-            PriceSize::new(2.2,2.0),
-            PriceSize::new(2.1,2.0),
-            PriceSize::new(2.0,2.0),
-            PriceSize::new(1.9,2.0),
-            PriceSize::new(1.8,2.0),
-            PriceSize::new(1.7,2.0),
-            PriceSize::new(1.6,1.0),
-            PriceSize::new(1.5,2.0),
-            PriceSize::new(1.4,3.0),
-            PriceSize::new(1.3,4.0),
-            PriceSize::new(1.2,5.0),
-            PriceSize::new(1.1,6.0),
-        ]);
+        assert_eq!(
+            ps,
+            vec![
+                PriceSize::new(3.1, 3.0),
+                PriceSize::new(3.0, 3.0),
+                PriceSize::new(2.9, 3.0),
+                PriceSize::new(2.8, 3.0),
+                PriceSize::new(2.7, 3.0),
+                PriceSize::new(2.6, 3.0),
+                PriceSize::new(2.5, 3.0),
+                PriceSize::new(2.4, 3.0),
+                PriceSize::new(2.3, 3.0),
+                PriceSize::new(2.2, 2.0),
+                PriceSize::new(2.1, 2.0),
+                PriceSize::new(2.0, 2.0),
+                PriceSize::new(1.9, 2.0),
+                PriceSize::new(1.8, 2.0),
+                PriceSize::new(1.7, 2.0),
+                PriceSize::new(1.6, 1.0),
+                PriceSize::new(1.5, 2.0),
+                PriceSize::new(1.4, 3.0),
+                PriceSize::new(1.3, 4.0),
+                PriceSize::new(1.2, 5.0),
+                PriceSize::new(1.1, 6.0),
+            ]
+        );
     }
-
 }
-

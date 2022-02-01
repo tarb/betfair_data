@@ -1,7 +1,8 @@
 /target
 /data
-/.venv
 /dist
+/py_src
+/.venv/lib/*
 
 *.tar
 *.exe

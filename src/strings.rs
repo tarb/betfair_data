@@ -23,7 +23,7 @@ impl StringSetExtNeq for Option<String> {
             None => {
                 *self = Some(String::from(s));
                 true
-            },
+            }
         }
     }
 }
@@ -47,7 +47,7 @@ impl<const N: usize> StringSetExtNeq for Option<StaticString<N>> {
             None => {
                 *self = Some(StaticString::from(s));
                 true
-            },
+            }
         }
     }
 }
