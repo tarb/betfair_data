@@ -5,9 +5,17 @@ build-backend = "maturin"
 [project]
 name = "betfair_data"
 requires-python = ">=3.6"
+version = "0.1.1"
+description = "Fast Python Betfair historic data file parser"
+authors = [ {name = "Robert Tarbath", email = "rtarbath@gmail.com"} ]
+license = {file = "LICENSE"}
+
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
 
+[project.urls]
+homepage = "https://github.com/tarb/betfair_data"
+repository = "https://github.com/tarb/betfair_data"
