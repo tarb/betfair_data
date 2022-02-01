@@ -76,8 +76,7 @@ jobs:
       - name: Install built wheel
         run: |
           pip install ${{ env.name }} --no-index --find-links dist --force-reinstall
-          pip install pytest
-          pytest
+
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -107,8 +106,7 @@ jobs:
       if: matrix.target == 'x86_64'
       run: |
         pip install ${{ env.name }} --no-index --find-links dist --force-reinstall
-        pip install pytest
-        pytest
+
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
