@@ -1,5 +1,5 @@
 from typing import Iterator, List, Sequence, Optional
-from datetime import datetime
+# from datetime import datetime
 
 class MarketImage():
     """
@@ -42,19 +42,23 @@ class MarketImage():
     in_play: bool
     market_base_rate: int
     market_name: Optional[str]
-    market_time: datetime
+    # market_time: datetime
+    market_time: int
     market_type: str
     number_of_active_runners: int
     number_of_winners: int
-    open_date: datetime
+    # open_date: datetime
+    open_date: int
     persistence_enabled: bool
     publish_time: int
     """Publish Time (in millis since epoch) that the changes were generated"""
     runners_voidable: bool
     runners: List[Runner]   
-    settled_time: Optional[datetime]
+    # settled_time: Optional[datetime]
+    settled_time: Optional[int]
     status: str
-    suspend_time: Optional[datetime]
+    # suspend_time: Optional[datetime]
+    suspend_time: Optional[int]
     timezone: str
     total_matched: float
     """The total amount matched across the market. This value is truncated at 2dp (or null if un-changed)
@@ -92,7 +96,8 @@ class Runner():
     adjustment_factor: Optional[float]
     handicap: Optional[float]
     sort_priority: int
-    removal_date: Optional[datetime]
+    # removal_date: Optional[datetime]
+    removal_date: Optional[int]
     ex: RunnerBookEX
     sp: RunnerBookSP
 

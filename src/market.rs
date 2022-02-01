@@ -1,6 +1,6 @@
 use std::fmt;
 use pyo3::{prelude::*}; 
-use pyo3::types::PyDateTime;
+// use pyo3::types::PyDateTime;
 use serde::de::IgnoredAny;
 use staticvec::StaticString;
 use serde::{ Deserialize, Deserializer, de::{ DeserializeSeed, Visitor, MapAccess }};
@@ -74,16 +74,20 @@ pub struct PyMarketBase {
     #[pyo3(get)]
     runners: Vec<Py<PyRunner>>,    
     #[pyo3(get)]
-    market_time: Option<Py<PyDateTime>>,
+    market_time: i64,
+    // market_time: Option<Py<PyDateTime>>,
     market_time_str: StaticString<24>,
     #[pyo3(get)]
-    open_date: Option<Py<PyDateTime>>,
+    open_date: i64,
+    // open_date: Option<Py<PyDateTime>>,
     open_date_str: StaticString<24>,
     #[pyo3(get)]
-    suspend_time: Option<Py<PyDateTime>>,
+    suspend_time: Option<i64>,
+    // suspend_time: Option<Py<PyDateTime>>,
     suspend_time_str: Option<StaticString<24>>,
     #[pyo3(get)]
-    settled_time: Option<Py<PyDateTime>>,
+    settled_time: Option<i64>,
+    // settled_time: Option<Py<PyDateTime>>,
     settled_time_str: Option<StaticString<24>>,
     // require getter functions
     market_id: MarketID,
@@ -442,32 +446,36 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                                 let s = map.next_value()?;
                                 if self.0.market_time_str.set_if_ne(s) {                                
                                     let ts = chrono::DateTime::parse_from_rfc3339(s).unwrap().timestamp_millis() / 1000;
-                                    let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                    self.0.market_time = Some(d.into_py(self.1));
+                                    // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
+                                    // self.0.market_time = Some(d.into_py(self.1));
+                                    self.0.market_time = ts;
                                 }
                             }
                             Field::SuspendTime => {
                                 let s = map.next_value()?;
                                 if self.0.suspend_time_str.set_if_ne(s) {
                                     let ts = chrono::DateTime::parse_from_rfc3339(s).unwrap().timestamp_millis() / 1000;
-                                    let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                    self.0.suspend_time = Some(d.into_py(self.1));
+                                    // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
+                                    // self.0.suspend_time = Some(d.into_py(self.1));
+                                    self.0.suspend_time = Some(ts);
                                 }
                             }
                             Field::SettledTime => {
                                 let s = map.next_value()?;
                                 if self.0.settled_time_str.set_if_ne(s) {
                                     let ts = chrono::DateTime::parse_from_rfc3339(s).unwrap().timestamp_millis() / 1000;
-                                    let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                    self.0.settled_time = Some(d.into_py(self.1));
+                                    // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
+                                    // self.0.settled_time = Some(d.into_py(self.1));
+                                    self.0.settled_time = Some(ts);
                                 }
                             }
                             Field::OpenDate => {
                                 let s = map.next_value()?;
                                 if self.0.open_date_str.set_if_ne(s) {
                                     let ts = chrono::DateTime::parse_from_rfc3339(s).unwrap().timestamp_millis() / 1000;
-                                    let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                    self.0.open_date = Some(d.into_py(self.1));
+                                    // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
+                                    // self.0.open_date = Some(d.into_py(self.1));
+                                    self.0.open_date = ts;
                                 }
                             }
                             Field::Regulators => { map.next_value::<serde::de::IgnoredAny>()?; },

@@ -1,56 +1,49 @@
 name: build
 
 on:
-  # pull_request:
   push:
-  # release:
-  #   types:
-  #     - released
-  #     - prereleased
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  name: betfair_data
 
 jobs:
   macos:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
+        python_version: ["3.8", "3.9", "3.10"]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python_version }}
+          architecture: x64
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly-2022-01-21
-          target: aarch64-apple-darwin
           profile: minimal
           default: true
-      - name: Build
-        run: cargo build --release
-      - name: Tests
-        run: cargo test --no-default-features --release
       - name: Build wheels - x86_64
         uses: messense/maturin-action@v1
         with:
           target: x86_64
-          args: -i python --release --out dist
+          args: --release --out dist
       - name: Install built wheel - x86_64
         run: |
-          pip install betfair_data --no-index --find-links dist --force-reinstall
+          pip install ${{ env.name }} --no-index --find-links dist --force-reinstall
+
       - name: Build wheels - universal2
-        if: ${{ matrix.python-version >= '3.8' || matrix.python-version == '3.10' }}
         uses: messense/maturin-action@v1
         with:
-          args: -i python --release --universal2 --out dist --no-sdist
+          args: --release --universal2 --out dist --no-sdist
       - name: Install built wheel - universal2
-        if: ${{ matrix.python-version >= '3.8' }}
         run: |
-          pip install betfair_data --no-index --find-links dist --force-reinstall
-      # - name: Python UnitTest
-      #   run: |
-      #     pip install -r dev-requirements.txt
-      #     make test
+          pip install ${{ env.name }} --no-index --find-links dist --force-reinstall
+          
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -61,40 +54,30 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
         target: [x64, x86]
+        python_version: ["3.8", "3.9", "3.10"]
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python_version }}
           architecture: ${{ matrix.target }}
-      - name: Update rustup
-        run: rustup self update
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly-2022-01-21
           profile: minimal
           default: true
-      - name: Build
-        if: matrix.target == 'x64'
-        run: cargo build --release
-      - name: Tests
-        if: matrix.target == 'x64'
-        run: cargo test --no-default-features --release
       - name: Build wheels
         uses: messense/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: -i python --release --out dist --no-sdist
+          args: --release --out dist --no-sdist
       - name: Install built wheel
         run: |
-          pip install betfair_data --no-index --find-links dist --force-reinstall
-      # - name: Python UnitTest
-      #   run: |
-      #     pip install -r dev-requirements.txt
-      #     make test
+          pip install ${{ env.name }} --no-index --find-links dist --force-reinstall
+          pip install pytest
+          pytest
       - name: Upload wheels
         uses: actions/upload-artifact@v2
         with:
@@ -105,45 +88,27 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.6', '3.7', '3.8', '3.9', '3.10']
         target: [x86_64, i686]
+        python_version: ["3.8", "3.9", "3.10"]
     steps:
     - uses: actions/checkout@v2
-    - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly-2022-01-21
-        profile: minimal
-        default: true
-    - name: Build
-      run: cargo build --release
-    - name: Tests
-      run: cargo test --no-default-features --release
     - uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: ${{ matrix.python_version }}
+        architecture: x64
     - name: Build Wheels
       uses: messense/maturin-action@v1
       with:
+        rust-toolchain: nightly-2022-01-21
         target: ${{ matrix.target }}
         manylinux: auto
-        args: -i python${{ matrix.python-version }} --release --out dist --no-sdist
-    - name: Python UnitTest
+        args: --release --out dist --no-sdist
+    - name: Install built wheel
       if: matrix.target == 'x86_64'
       run: |
-        pip install betfair_data --no-index --find-links dist --force-reinstall
-   
-    # - name: Test no numpy installed works
-    #   if: matrix.target == 'x86_64'
-    #   run: |
-    #     pip uninstall numpy -y
-    #     python -m pytest tests/test_no_numpy.py
-    # - name: Test benchmarks
-    #   if: matrix.target == 'x86_64'
-    #   run: |
-    #     sudo apt-get install -y libsnappy-dev
-    #     pip install -r benchmark-requirements.txt
-    #     make test-bench
+        pip install ${{ env.name }} --no-index --find-links dist --force-reinstall
+        pip install pytest
+        pytest
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
@@ -154,141 +119,42 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: [
-          { version: '3.6', abi: 'cp36-cp36m' },
-          { version: '3.7', abi: 'cp37-cp37m' },
-          { version: '3.8', abi: 'cp38-cp38' },
-          { version: '3.9', abi: 'cp39-cp39' },
-          { version: '3.10', abi: 'cp310-cp310' },
-        ]
         target: [aarch64, armv7, s390x, ppc64le, ppc64]
-        include:
-          - python:
-              version: 3.7
-              abi: pp37-pypy37_pp73
-            target: aarch64
-          - python:
-              version: 3.8
-              abi: pp38-pypy38_pp73
-            target: aarch64
-    steps:
-    - uses: actions/checkout@v2
-    - name: Build Wheels
-      uses: messense/maturin-action@v1
-      env:
-        PYO3_CROSS_LIB_DIR: /opt/python/${{ matrix.python.abi }}
-      with:
-        target: ${{ matrix.target }}
-        manylinux: auto
-        args: -i python3.9 --release --out dist --no-sdist --cargo-extra-args="--no-default-features" --cargo-extra-args="--features=extension-module"  # disable mimallocator
-    - uses: uraimo/run-on-arch-action@v2.0.5
-      # run-on-arch-action doesn't have ppc64 support
-      # skipped cross compiled pypy wheel tests for now
-      if: ${{ matrix.target != 'ppc64' && !startsWith(matrix.python.abi, 'pp') }}
-      name: Install built wheel
-      with:
-        arch: ${{ matrix.target }}
-        distro: ubuntu20.04
-        githubToken: ${{ github.token }}
-        # Mount the dist directory as /artifacts in the container
-        dockerRunArgs: |
-          --volume "${PWD}/dist:/artifacts"
-        install: |
-          apt-get update
-          apt-get install -y --no-install-recommends python3 python3-venv software-properties-common
-          add-apt-repository ppa:deadsnakes/ppa
-          apt-get update
-          apt-get install -y curl python3.6-venv python3.7-venv python3.9-venv python3.10-venv
-        run: |
-          ls -lrth /artifacts
-          PYTHON=python${{ matrix.python.version }}
-          $PYTHON -m venv venv
-          venv/bin/pip install -U pip
-          venv/bin/pip install betfair_data --no-index --find-links /artifacts --force-reinstall
-          venv/bin/python -c 'import betfair_data'
-    - name: Upload wheels
-      uses: actions/upload-artifact@v2
-      with:
-        name: wheels
-        path: dist
-
-  pypy-linux:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python: [
-          { version: pypy-3.7, abi: pp37-pypy37_pp73 },
-          { version: pypy-3.8, abi: pp38-pypy38_pp73 },
-        ]
+        python_version: ["3.8", "3.9", "3.10"]
     steps:
     - uses: actions/checkout@v2
     - uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python.version }}
+        python-version: 
     - name: Build Wheels
       uses: messense/maturin-action@v1
       with:
+        rust-toolchain: nightly-2022-01-21
         target: ${{ matrix.target }}
         manylinux: auto
-        args: -i /opt/python/${{ matrix.python.abi }}/bin/pypy --release --out dist --no-sdist --cargo-extra-args="--no-default-features" --cargo-extra-args="--features=extension-module"  # disable mimallocator
-    # - name: Python UnitTest
-    #   run: |
-    #     pip install betfair_data --no-index --find-links dist
-    #     pypy -c "import betfair_data"
+        args: --release --out dist --no-sdist
     - name: Upload wheels
       uses: actions/upload-artifact@v2
       with:
         name: wheels
         path: dist
 
-  pypy-macos:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python-version: [ pypy-3.7, pypy-3.8 ]
+  sdist:
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: nightly-2022-01-21
-        profile: minimal
-        default: true
     - uses: actions/setup-python@v2
       with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install maturin
-      run: pip install maturin
-    - name: Build Wheels
-      run: |
-        make pypy-build
-        ls -l dist
-    - name: Python UnitTest
-      run: |
-        pip install betfair_data --no-index --find-links dist
-        pypy -c "import betfair_data"
-    - name: Upload wheels
+        python-version: 
+    - name: Build sdist
+      uses: messense/maturin-action@v1
+      with:
+        command: sdist
+        rust-toolchain: nightly-2022-01-21
+        args: --out dist
+    - name: Upload sdist
       uses: actions/upload-artifact@v2
       with:
         name: wheels
         path: dist
-
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    if: "startsWith(github.ref, 'refs/tags/')"
-    needs: [ macos, windows, linux, linux-cross, pypy-linux, pypy-macos ]
-    steps:
-      - uses: actions/download-artifact@v2
-        with:
-          name: wheels
-      - uses: actions/setup-python@v2
-        with:
-          python-version: 3.9
-      - name: Publish to PyPi
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-        run: |
-          pip install --upgrade wheel pip setuptools twine
-          twine upload --skip-existing *
+    
