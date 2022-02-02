@@ -222,6 +222,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
             Name,
             Bsp,
             RemovalDate,
+            Hc
         }
 
         struct RunnerDefVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, SourceConfig);
@@ -244,6 +245,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
                         }
                         Field::Status => self.0.status = map.next_value()?,
                         Field::SortPriority => self.0.sort_priority = map.next_value()?,
+                        Field::Hc => self.0.handicap = Some(map.next_value::<F64OrStr>()?.into()),
                         Field::Name => {
                             self.0.name.set_if_ne(map.next_value()?);
                         }
@@ -263,6 +265,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
                             let mut sp = self.0.sp.borrow_mut(self.1);
                             sp.actual_sp = Some(map.next_value::<F64OrStr>()?.into());
                         }
+                        
                     }
                 }
 
