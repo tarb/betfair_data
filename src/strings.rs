@@ -4,7 +4,6 @@ pub trait StringSetExtNeq {
     fn set_if_ne<S: Into<String> + AsRef<str>>(&mut self, s: S) -> bool;
 }
 
-
 impl StringSetExtNeq for String {
     fn set_if_ne<S: Into<String> + AsRef<str>>(&mut self, s: S) -> bool {
         if s.as_ref() != self {

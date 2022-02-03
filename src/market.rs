@@ -645,34 +645,28 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                         }
 
                         Field::RaceType => {
-                            print!("RaceType");
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::KeyLineDefiniton => {
-                            print!("KeyLineDefiniton");
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::PriceLadderDefinition => {
-                            print!("PriceLadderDefinition");
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::LineMaxUnit => {
-                            print!("LineMaxUnit");
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::LineMinUnit => {
-                            print!("LineMinUnit");
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::LineInterval => {
-                            print!("LineInterval");
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                     }
                 }
