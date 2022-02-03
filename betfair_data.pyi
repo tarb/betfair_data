@@ -90,7 +90,7 @@ class Runner():
     name: str
     status: str
     last_price_traded: Optional[float]
-    total_volume: float
+    total_matched: float
     adjustment_factor: Optional[float]
     handicap: Optional[float]
     sort_priority: int

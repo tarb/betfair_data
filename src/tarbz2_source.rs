@@ -28,7 +28,7 @@ impl MarketSource for TarBzSource {
 impl TarBzSource {
     pub fn new<S: Into<String>>(path: S) -> Result<Self, Error> {
         let path = path.into();
-        let (data_send, data_recv) = bounded(2);
+        let (data_send, data_recv) = bounded(5);
         let file = File::open(&path)?;
 
         // on TarBzSource drop, data_send will become disconnected, causing send to fail with an error

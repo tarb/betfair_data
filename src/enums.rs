@@ -32,6 +32,9 @@ pub enum SelectionStatus {
     #[strum(serialize = "REMOVED")]
     #[serde(rename = "REMOVED")]
     Removed,
+    #[strum(serialize = "REMOVED_VACANT")]
+    #[serde(rename = "REMOVED_VACANT")]
+    RemovedVacant,
     #[strum(serialize = "WINNER")]
     #[serde(rename = "WINNER")]
     Winner,
@@ -78,6 +81,24 @@ pub enum MarketBettingType {
     #[serde(rename = "FIXED_ODDS")]
     FixedOdds,
 }
+
+#[derive(
+    Debug, Default, PartialEq, Copy, Clone, Serialize, Deserialize, AsRefStr, IntoStaticStr,
+)]
+pub enum PriceLadderDefinition {
+    #[default]
+    #[strum(serialize = "CLASSIC")]
+    #[serde(rename = "CLASSIC")]
+    Classic,
+    #[strum(serialize = "FINEST")]
+    #[serde(rename = "FINEST")]
+    Finest,
+    #[deprecated]
+    #[strum(serialize = "LINE_RANGE")]
+    #[serde(rename = "LINE_RANGE")]
+    LineRange,
+}
+
 
 #[cfg(test)]
 mod tests {

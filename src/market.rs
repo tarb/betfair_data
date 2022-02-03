@@ -1,13 +1,14 @@
+use log::warn;
 use pyo3::prelude::*;
-use std::fmt;
-// use pyo3::types::PyDateTime;
 use serde::de::IgnoredAny;
 use serde::{
-    de::{DeserializeSeed, MapAccess, Visitor},
+    de::{self, DeserializeSeed, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
 use serde_json::Error;
 use staticvec::StaticString;
+use std::borrow::Cow;
+use std::fmt;
 
 use crate::deser::{Deser, DeserializerWithData};
 use crate::enums::{MarketBettingType, MarketStatus};
@@ -272,8 +273,11 @@ impl PyMarket {
 
         let r = Self::drive_deserialize(&mut deser, base, config, py)
             .map(|_| true)
-            .unwrap_or_else(|_err| {
-                // TODO: log here
+            .unwrap_or_else(|err| {
+                if !err.is_eof() {
+                    warn!(target: "betfair_data", "source: {} file: {} err: (JSON Parse Error) {}", base.source, base.file, err);
+                }
+
                 false
             });
 
@@ -324,7 +328,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
                         Field::Pt => self.0.publish_time = map.next_value()?,
                         Field::Mc => map.next_value_seed(PyMarketMcSeq(self.0, self.1, self.2))?,
                         Field::Clk => {
-                            self.0.clk.set_if_ne(map.next_value()?);
+                            self.0.clk.set_if_ne(map.next_value::<&str>()?);
                         }
                     }
                 }
@@ -407,7 +411,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Id => {
-                            self.0.market_id.set_if_ne(map.next_value()?);
+                            self.0.market_id.set_if_ne(map.next_value::<&str>()?);
                         }
                         Field::MarketDefinition => {
                             map.next_value_seed(PyMarketDefinition(self.0, self.1, self.2))?
@@ -441,7 +445,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                         .0
                         .runners
                         .iter()
-                        .map(|r| r.borrow(self.1).total_volume)
+                        .map(|r| r.borrow(self.1).total_matched)
                         .sum();
                 }
 
@@ -471,37 +475,43 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
         #[derive(Debug, Deserialize)]
         #[serde(field_identifier, rename_all = "camelCase")]
         enum Field {
-            BspMarket,
-            TurnInPlayEnabled,
-            PersistenceEnabled,
-            MarketBaseRate,
-            EventId,
-            EventTypeId,
-            NumberOfWinners,
+            BetDelay,
             BettingType,
-            MarketType,
-            MarketTime,
-            SuspendTime,
+            BspMarket,
             BspReconciled,
             Complete,
-            InPlay,
-            CrossMatching,
-            RunnersVoidable,
-            NumberOfActiveRunners,
-            BetDelay,
-            Status,
-            Runners,
-            Regulators,
             CountryCode,
+            CrossMatching,
             DiscountAllowed,
-            Timezone,
-            OpenDate,
-            Version,
-            Name,
-            EventName,
-            Venue,
-            SettledTime,
             EachWayDivisor,
+            EventId,
+            EventName,
+            EventTypeId,
+            InPlay,
+            KeyLineDefiniton,
+            LineMaxUnit,
+            LineMinUnit,
+            LineInterval,
+            MarketBaseRate,
+            MarketTime,
+            MarketType,
+            Name,
+            NumberOfActiveRunners,
+            NumberOfWinners,
+            OpenDate,
+            PersistenceEnabled,
+            PriceLadderDefinition,
+            RaceType,
+            Regulators,
+            Runners,
+            RunnersVoidable,
+            SettledTime,
+            Status,
+            SuspendTime,
+            Timezone,
+            TurnInPlayEnabled,
+            Venue,
+            Version,
         }
 
         struct PyMarketDefinitionVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
@@ -532,19 +542,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                         Field::RunnersVoidable => self.0.runners_voidable = map.next_value()?,
                         Field::DiscountAllowed => self.0.discount_allowed = map.next_value()?,
                         Field::Timezone => {
-                            self.0.timezone.set_if_ne(map.next_value()?);
+                            self.0.timezone.set_if_ne(map.next_value::<&str>()?);
                         }
                         Field::Name => {
-                            self.0.market_name.set_if_ne(map.next_value()?);
+                            self.0.market_name.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::EventName => {
-                            self.0.event_name.set_if_ne(map.next_value()?);
+                            self.0.event_name.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::CountryCode => {
-                            self.0.country_code.set_if_ne(map.next_value()?);
+                            self.0.country_code.set_if_ne(map.next_value::<&str>()?);
                         }
                         Field::Venue => {
-                            self.0.venue.set_if_ne(map.next_value()?);
+                            self.0.venue.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::Status => self.0.status = map.next_value()?,
                         Field::MarketBaseRate => {
@@ -558,11 +568,17 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                         }
                         Field::BetDelay => self.0.bet_delay = map.next_value()?,
                         Field::EventId => {
-                            self.0.event_id = map.next_value::<&str>()?.parse().unwrap()
-                        } // TODO: fix unwrap
+                            self.0.event_id = map
+                                .next_value::<&str>()?
+                                .parse()
+                                .map_err(|err| de::Error::custom(err))?;
+                        }
                         Field::EventTypeId => {
-                            self.0.event_type_id = map.next_value::<&str>()?.parse().unwrap()
-                        } // TODO: fix unwrap
+                            self.0.event_type_id = map
+                                .next_value::<&str>()?
+                                .parse()
+                                .map_err(|err| de::Error::custom(err))?;
+                        }
                         Field::Version => self.0.version = map.next_value()?,
                         Field::Runners => map.next_value_seed(PyRunnerDefSeq(
                             &mut self.0.runners,
@@ -570,7 +586,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             self.2,
                         ))?,
                         Field::MarketType => {
-                            self.0.market_type.set_if_ne(map.next_value()?);
+                            self.0.market_type.set_if_ne(map.next_value::<&str>()?);
                         }
                         Field::BettingType => self.0.betting_type = map.next_value()?,
                         Field::EachWayDivisor => {
@@ -580,7 +596,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.market_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .unwrap()
+                                    .map_err(|err| de::Error::custom(err))?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -592,7 +608,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.suspend_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .unwrap()
+                                    .map_err(|err| de::Error::custom(err))?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -604,7 +620,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.settled_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .unwrap()
+                                    .map_err(|err| de::Error::custom(err))?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -616,7 +632,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.open_date_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .unwrap()
+                                    .map_err(|err| de::Error::custom(err))?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -627,6 +643,37 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                         Field::Regulators => {
                             map.next_value::<serde::de::IgnoredAny>()?;
                         }
+
+                        Field::RaceType => {
+                            print!("RaceType");
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                            panic!("{} {}", self.0.source, self.0.file);
+                        }
+                        Field::KeyLineDefiniton => {
+                            print!("KeyLineDefiniton");
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                            panic!("{} {}", self.0.source, self.0.file);
+                        }
+                        Field::PriceLadderDefinition => {
+                            print!("PriceLadderDefinition");
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                            panic!("{} {}", self.0.source, self.0.file);
+                        }
+                        Field::LineMaxUnit => {
+                            print!("LineMaxUnit");
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                            panic!("{} {}", self.0.source, self.0.file);
+                        }
+                        Field::LineMinUnit => {
+                            print!("LineMinUnit");
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                            panic!("{} {}", self.0.source, self.0.file);
+                        }
+                        Field::LineInterval => {
+                            print!("LineInterval");
+                            map.next_value::<serde::de::IgnoredAny>()?;
+                            panic!("{} {}", self.0.source, self.0.file);
+                        }
                     }
                 }
                 Ok(())
@@ -634,6 +681,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
         }
 
         const FIELDS: &'static [&'static str] = &[
+            "keyLineDefiniton",
+            "priceLadderDefinition",
+            "raceType",
+            "lineMaxUnit",
+            "lineMinUnit",
+            "lineInterval",
             "bspMarket",
             "turnInPlayEnabled",
             "persistenceEnabled",

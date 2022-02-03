@@ -215,7 +215,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeBackLadder<'a> {
                     } else {
                         match self.0.binary_search_by(cmp_fn) {
                             // updating price
-                            Ok(index) => self.0.get_mut(index).unwrap().size = ps1.size,
+                            Ok(index) => unsafe { self.0.get_unchecked_mut(index) }.size = ps1.size,
                             // inserting price
                             Err(index) => self.0.insert(index, ps1),
                         }
@@ -277,7 +277,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
                     } else {
                         match self.0.binary_search_by(cmp_fn) {
                             // updating price
-                            Ok(index) => self.0.get_mut(index).unwrap().size = ps1.size,
+                            Ok(index) => unsafe { self.0.get_unchecked_mut(index) }.size = ps1.size,
                             // inserting price
                             Err(index) => self.0.insert(index, ps1),
                         }
