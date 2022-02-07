@@ -405,11 +405,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
                         Field::Id => self.0.selection_id = map.next_value()?,
                         Field::Atb => {
                             let mut ex = self.0.ex.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeBackLadder(&mut ex.available_to_back))?;
+                            map.next_value_seed(PriceSizeLayLadder(&mut ex.available_to_back))?;
                         }
                         Field::Atl => {
                             let mut ex = self.0.ex.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeLayLadder(&mut ex.available_to_lay))?;
+                            map.next_value_seed(PriceSizeBackLadder(&mut ex.available_to_lay))?;
                         }
                         Field::Trd => {
                             let mut ex = self.0.ex.borrow_mut(self.1);
@@ -417,11 +417,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
                         }
                         Field::Spb => {
                             let mut sp = self.0.sp.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeBackLadder(&mut sp.lay_liability_taken))?;
+                            map.next_value_seed(PriceSizeLayLadder(&mut sp.lay_liability_taken))?;
                         }
                         Field::Spl => {
                             let mut sp = self.0.sp.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeLayLadder(&mut sp.back_stake_taken))?;
+                            map.next_value_seed(PriceSizeBackLadder(&mut sp.back_stake_taken))?;
                         }
                         Field::Spn => {
                             let mut sp = self.0.sp.borrow_mut(self.1);

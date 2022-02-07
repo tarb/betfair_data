@@ -35,15 +35,17 @@ impl<T: MarketSource> Iterator for SourceIter<T> {
                             break Some(si);
                         }
                         // iterator contained a value, but that value was an error
-                        // these errors will be io erros from pulling from the
+                        // these errors will be io errors from pulling from the
                         // tar file - not serializations errors of the contained json
                         Some(Err(IOErr {
                             file: Some(name),
                             err,
                         })) => {
+                            self.pos = (self.pos + 1) % len;
                             warn!(target: "betfair_data", "source: {} file: {} err: (IO Error) {}", iter.source(), name, err)
                         }
                         Some(Err(IOErr { file: None, err })) => {
+                            self.pos = (self.pos + 1) % len;
                             warn!(target: "betfair_data", "source: {} err: (IO Error) {}", iter.source(), err)
                         }
 
@@ -52,11 +54,99 @@ impl<T: MarketSource> Iterator for SourceIter<T> {
                         // elements to be compact
                         None => {
                             sources.remove(self.pos);
+                            self.pos = if len > 1 { self.pos % (len - 1) } else { 0 };
                         }
                     }
                 }
                 None => break None,
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{IOErr, MarketSource, SourceItem};
+
+    use super::SourceIter;
+
+    struct TestSource {
+        source: &'static str,
+        test_count: usize,
+        pos: usize,
+    }
+
+    impl MarketSource for TestSource {
+        fn source(&self) -> &str {
+            &self.source
+        }
+    }
+
+    impl Iterator for TestSource {
+        type Item = Result<SourceItem, IOErr>;
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.pos < self.test_count {
+                self.pos += 1;
+                Some(Ok(SourceItem::new(
+                    "source".to_owned(),
+                    "file".to_owned(),
+                    Vec::default(),
+                )))
+            } else {
+                None
+            }
+        }
+    }
+
+    impl TestSource {
+        fn new(count: usize) -> Self {
+            Self {
+                source: "test",
+                pos: 0,
+                test_count: count,
+            }
+        }
+    }
+
+    #[test]
+    fn test_full_iteration() {
+        // 1
+        let counts: Vec<usize> = vec![111, 127, 1318, 80];
+        let sources = SourceIter::new(
+            counts
+                .iter()
+                .map(|c| TestSource::new(*c))
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            sources.fold(0, |count, _s| count + 1),
+            counts.iter().sum::<usize>(),
+        );
+
+        // 2
+        let counts: Vec<usize> = vec![1000, 20, 20];
+        let sources = SourceIter::new(
+            counts
+                .iter()
+                .map(|c| TestSource::new(*c))
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            sources.fold(0, |count, _s| count + 1),
+            counts.iter().sum::<usize>(),
+        );
+
+        // 3
+        let counts: Vec<usize> = vec![10, 1000, 40];
+        let sources = SourceIter::new(
+            counts
+                .iter()
+                .map(|c| TestSource::new(*c))
+                .collect::<Vec<_>>(),
+        );
+        assert_eq!(
+            sources.fold(0, |count, _s| count + 1),
+            counts.iter().sum::<usize>(),
+        );
     }
 }

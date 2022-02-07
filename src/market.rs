@@ -644,6 +644,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             map.next_value::<serde::de::IgnoredAny>()?;
                         }
 
+                        // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::RaceType => {
                             map.next_value::<serde::de::IgnoredAny>()?;
                             // panic!("{} {}", self.0.source, self.0.file);
