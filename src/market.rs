@@ -1,11 +1,11 @@
 use log::warn;
 use pyo3::prelude::*;
-use serde::de::IgnoredAny;
+use serde::de::{IgnoredAny, Error};
 use serde::{
     de::{self, DeserializeSeed, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
-use serde_json::Error;
+// use serde_json::Error;
 use staticvec::StaticString;
 use std::borrow::Cow;
 use std::fmt;
@@ -257,7 +257,7 @@ impl PyMarket {
         base: &mut PyMarketBase,
         config: SourceConfig,
         py: Python,
-    ) -> Result<(), Error> {
+    ) -> Result<(), serde_json::Error> {
         deser.with_dependent_mut(|_, deser| {
             PyMarketToken(base, py, config).deserialize(&mut deser.0)
         })
@@ -411,7 +411,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Id => {
-                            self.0.market_id.set_if_ne(map.next_value::<&str>()?);
+                            // Do not currently support files that have multiple markets in them.
+                            // There are event level files that betfair provide, which have every 
+                            // market for an event 
+                            // with filtering: if a market has already been initted and then 
+                            // changes then we must have a multi market file.
+                            let is_init = self.0.market_id.len() > 0;
+                            if self.0.market_id.set_if_ne(map.next_value::<&str>()?) && is_init {
+                                return Err(Error::custom("multiple markets per file is not supported"));
+                            }
                         }
                         Field::MarketDefinition => {
                             map.next_value_seed(PyMarketDefinition(self.0, self.1, self.2))?
@@ -720,4 +728,29 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
             PyMarketDefinitionVisitor(self.0, self.1, self.2),
         )
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    
+    // test disabled awaiting merge which fixes cargo test
+    // https://github.com/PyO3/pyo3/pull/2135
+    /* 
+    use super::*;
+    
+    #[test]
+    fn test_multiple_markets() {
+        let mut m = PyMarketBase::new("".to_owned(), "".to_owned());
+        let py = unsafe { Python::assume_gil_acquired() };
+
+        let config = SourceConfig{cumulative_runner_tv: true, stable_runner_index: false};
+
+        let mut deser = serde_json::Deserializer::from_str(r#"{"id": "1.123456789"}{"id":"1.987654321"}"#);
+
+        PyMarketMc(&mut m, py, config).deserialize(&mut deser).expect("1st market_id deser ok");
+        PyMarketMc(&mut m, py, config).deserialize(&mut deser).expect_err("2nd market_id deser error");
+    }
+    */
+
 }

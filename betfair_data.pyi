@@ -1,5 +1,4 @@
 from typing import Iterator, List, Sequence, Optional
-# from datetime import datetime
 
 class MarketImage():
     """
@@ -13,24 +12,24 @@ class MarketImage():
     betting_type: str
     bsp_market: bool
     """Is BSP betting available for this market
-            >>> print(m.bsp_market)
+            >>> m.bsp_market
             True
     """
     bsp_reconciled: bool
     """Has the starting price been detirmined for this market
-            >>> print(m.bsp_reconciled)
+            >>> m.bsp_reconciled
             False
     """
     clk: str
     """Token value (non-null) should be stored and passed in a MarketSubscriptionMessage to resume subscription (in case of disconnect)"""
     complete: bool
     """Is the market in a completed state
-            >>> print(m.complete)
+            >>> m.complete
             False
     """
     country_code: str
     """The country the market is taking place in. 2 digit string
-            >>> print(m.country_code)
+            >>> m.country_code
             'AU'
     """
     cross_matching: bool
@@ -42,33 +41,32 @@ class MarketImage():
     in_play: bool
     market_base_rate: int
     market_name: Optional[str]
-    # market_time: datetime
     market_time: int
     market_type: str
     number_of_active_runners: int
     number_of_winners: int
-    # open_date: datetime
     open_date: int
     persistence_enabled: bool
     publish_time: int
     """Publish Time (in millis since epoch) that the changes were generated"""
     runners_voidable: bool
     runners: List[Runner]   
-    # settled_time: Optional[datetime]
     settled_time: Optional[int]
     status: str
-    # suspend_time: Optional[datetime]
+    """The markets current status, value is one of ["INACTIVE", "OPEN", "SUSPENDED", "CLOSED"]
+        >>> market.status
+        'CLOSED'
+    """
     suspend_time: Optional[int]
     timezone: str
     total_matched: float
     """The total amount matched across the market. This value is truncated at 2dp (or null if un-changed)
-        >>> print(m.total_matched)
+        >>> m.total_matched
         53212.45
     """
     turn_in_play_enabled: bool
     venue: Optional[str]
     version: int
-    """ version derp """
 
 
 class Market(MarketImage):
@@ -79,7 +77,13 @@ class Market(MarketImage):
             >>> market.update()
         """  
     def copy(self) -> MarketImage:
-        """ 
+        """ Create an immutable copy of the market, including runners and prices that wont be updated
+
+        Example:
+            >>> c = market.copy()
+            >>> market.update()
+            >>> market.publish_time != c.publish_time
+            True
         """  
 
 class Runner():
@@ -87,14 +91,17 @@ class Runner():
     A class representing a Betfair Runner.
     """
     selection_id: int
-    name: str
+    name: Optional[str]
     status: str
+    """The runners current status, value is one of ["ACTIVE", "REMOVED", "REMOVED_VACANT", "WINNER", "PLACED", "LOSER", "HIDDEN"]
+        >>> market.runners[0].status
+        'ACTIVE'
+    """
     last_price_traded: Optional[float]
     total_matched: float
     adjustment_factor: Optional[float]
     handicap: Optional[float]
     sort_priority: int
-    # removal_date: Optional[datetime]
     removal_date: Optional[int]
     ex: RunnerBookEX
     sp: RunnerBookSP

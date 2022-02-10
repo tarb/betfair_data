@@ -1,6 +1,6 @@
 [package]
 name = "betfair_data"
-version = "0.1.5"
+version = "0.1.6"
 edition = "2021"
 
 [lib]
@@ -22,3 +22,8 @@ strum_macros = "0.23"
 chrono = "0.4.19"
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rayon", "nightly"]}
 # bzip2-rs = { version = "0.1.2" }
+
+[profile.release]
+lto = true # "fat"    
+codegen-units = 1
+panic = "abort"
