@@ -68,15 +68,9 @@ impl Iterator for TarBzSource {
     type Item = Result<SourceItem, IOErr>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.chan.recv().ok().and_then(|r| {
-            let r = match r {
-                Ok(entry) => Ok(SourceItem::new(self.source.clone(), entry.name, entry.bs)),
-                Err((err, name)) => Err(IOErr {
-                    file: name,
-                    err: err,
-                }),
-            };
-            Some(r)
+        self.chan.recv().ok().map(|r| match r {
+            Ok(entry) => Ok(SourceItem::new(self.source.clone(), entry.name, entry.bs)),
+            Err((err, name)) => Err(IOErr { file: name, err }),
         })
     }
 }

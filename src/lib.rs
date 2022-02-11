@@ -12,17 +12,20 @@ mod tarbz2_source;
 
 use log::warn;
 use market::PyMarketBase;
+use mimalloc::MiMalloc;
 use price_size::PriceSize;
 use pyo3::exceptions;
 use pyo3::prelude::*;
 use pyo3::types::{PySequence, PyString};
 use pyo3::PyIterProtocol;
-use pyo3_log;
 use source_iter::SourceIter;
 use tarbz2_source::TarBzSource;
 
 use crate::market::PyMarket;
 use crate::runner::{PyRunner, PyRunnerBookEX, PyRunnerBookSP};
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 pub struct DeserErr {
     pub source: String,
@@ -88,8 +91,8 @@ impl TarBz2 {
             })?;
 
         Ok(Self {
+            config,
             sources: SourceIter::new(sources),
-            config: config,
         })
     }
 }

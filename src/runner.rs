@@ -1,12 +1,11 @@
 use pyo3::prelude::*;
-use std::{borrow::Cow, fmt};
-// use pyo3::types::PyDateTime;
 use serde::{
     de::{DeserializeSeed, Error, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
 use serde_json::value::RawValue;
 use staticvec::StaticString;
+use std::{borrow::Cow, fmt};
 
 use crate::ids::SelectionID;
 use crate::price_size::{F64OrStr, PriceSize, PriceSizeBackLadder, PriceSizeLayLadder};
@@ -77,7 +76,7 @@ impl PyRunner {
             handicap: self.handicap,
             sort_priority: self.sort_priority,
             removal_date_str: self.removal_date_str.clone(),
-            removal_date: self.removal_date.clone(),
+            removal_date: self.removal_date,
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
         }
@@ -165,7 +164,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
                     let rid: RunnerWithID =
-                        serde_json::from_str(raw.get()).map_err(|err| Error::custom(err))?;
+                        serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
                     let index = self
                         .0
@@ -178,13 +177,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                                 unsafe { self.0.get_unchecked(index).borrow_mut(self.1) };
                             PyRunnerDefinitonDeser(&mut runner, self.1, self.2)
                                 .deserialize(&mut deser)
-                                .map_err(|err| Error::custom(err))?
+                                .map_err(Error::custom)?
                         }
                         None => {
                             let mut runner = PyRunner::new(self.1);
                             PyRunnerDefinitonDeser(&mut runner, self.1, self.2)
                                 .deserialize(&mut deser)
-                                .map_err(|err| Error::custom(err))?;
+                                .map_err(Error::custom)?;
 
                             self.0.push(Py::new(self.1, runner).unwrap());
                         }
@@ -193,7 +192,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
 
                 // this config flag will reorder the runners into the order specified in the sort priority
                 // as seen in the data files
-                if self.2.stable_runner_index == false {
+                if !self.2.stable_runner_index {
                     self.0.sort_by_key(|r| r.borrow(self.1).sort_priority);
                 }
 
@@ -254,7 +253,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.removal_date_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .map_err(|err| Error::custom(err))?
+                                    .map_err(Error::custom)?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -273,7 +272,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "adjustmentFactor",
             "status",
             "sortPriority",
@@ -330,7 +329,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
                     let rid: RunnerWithID =
-                        serde_json::from_str(raw.get()).map_err(|err| Error::custom(err))?;
+                        serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
                     let index = self
                         .0
@@ -343,13 +342,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
                                 unsafe { self.0.get_unchecked(index).borrow_mut(self.1) };
                             PyRunnerChangeDeser(&mut runner, self.1, self.2)
                                 .deserialize(&mut deser)
-                                .map_err(|err| Error::custom(err))?;
+                                .map_err(Error::custom)?;
                         }
                         None => {
                             let mut runner = PyRunner::new(self.1);
                             PyRunnerChangeDeser(&mut runner, self.1, self.2)
                                 .deserialize(&mut deser)
-                                .map_err(|err| Error::custom(err))?;
+                                .map_err(Error::custom)?;
 
                             self.0.push(Py::new(self.1, runner).unwrap());
                         }
@@ -454,7 +453,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "id", "atb", "atl", "spn", "spf", "spb", "spl", "trd", "tv", "ltp", "hc",
         ];
         deserializer.deserialize_struct(

@@ -1,11 +1,10 @@
 use log::warn;
 use pyo3::prelude::*;
-use serde::de::{IgnoredAny, Error};
+use serde::de::{Error, IgnoredAny};
 use serde::{
     de::{self, DeserializeSeed, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
-// use serde_json::Error;
 use staticvec::StaticString;
 use std::borrow::Cow;
 use std::fmt;
@@ -79,21 +78,16 @@ pub struct PyMarketBase {
     runners: Vec<Py<PyRunner>>,
     #[pyo3(get)]
     market_time: i64,
-    // market_time: Option<Py<PyDateTime>>,
     market_time_str: StaticString<24>,
     #[pyo3(get)]
     open_date: i64,
-    // open_date: Option<Py<PyDateTime>>,
     open_date_str: StaticString<24>,
     #[pyo3(get)]
     suspend_time: Option<i64>,
-    // suspend_time: Option<Py<PyDateTime>>,
     suspend_time_str: Option<StaticString<24>>,
     #[pyo3(get)]
     settled_time: Option<i64>,
-    // settled_time: Option<Py<PyDateTime>>,
     settled_time_str: Option<StaticString<24>>,
-    // require getter functions
     market_id: MarketID,
     status: MarketStatus,
     country_code: StaticString<2>,
@@ -179,10 +173,10 @@ impl PyMarketBase {
             open_date_str: self.open_date_str.clone(),
             suspend_time_str: self.suspend_time_str.clone(),
             settled_time_str: self.settled_time_str.clone(),
-            market_time: self.market_time.clone(),
-            open_date: self.open_date.clone(),
-            suspend_time: self.suspend_time.clone(),
-            settled_time: self.settled_time.clone(),
+            market_time: self.market_time,
+            open_date: self.open_date,
+            suspend_time: self.suspend_time,
+            settled_time: self.settled_time,
             status: self.status,
             venue: self.venue.clone(),
             market_base_rate: self.market_base_rate,
@@ -193,7 +187,7 @@ impl PyMarketBase {
             event_type_id: self.event_type_id,
             version: self.version,
             total_matched: self.total_matched,
-            runners: runners,
+            runners,
         }
     }
 }
@@ -231,7 +225,7 @@ impl PyMarket {
         py: Python,
     ) -> Result<PyObject, DeserErr> {
         let mut deser = DeserializerWithData::new(item.bs, |bs| {
-            Deser(serde_json::Deserializer::from_slice(&bs))
+            Deser(serde_json::Deserializer::from_slice(bs))
         });
 
         let mut base = PyMarketBase::new(item.source, item.file);
@@ -247,7 +241,7 @@ impl PyMarket {
             Err(err) => Err(DeserErr {
                 source: base.source,
                 file: base.file,
-                err: err,
+                err,
             }),
         }
     }
@@ -337,7 +331,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &["op", "pt", "clk", "mc"];
+        const FIELDS: &[&str] = &["op", "pt", "clk", "mc"];
         deserializer.deserialize_struct(
             "MarketBook",
             FIELDS,
@@ -367,7 +361,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                while let Some(_) = seq.next_element_seed(PyMarketMc(self.0, self.1, self.2))? {}
+                while seq
+                    .next_element_seed(PyMarketMc(self.0, self.1, self.2))?
+                    .is_some()
+                {}
                 Ok(())
             }
         }
@@ -412,13 +409,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                     match key {
                         Field::Id => {
                             // Do not currently support files that have multiple markets in them.
-                            // There are event level files that betfair provide, which have every 
-                            // market for an event 
-                            // with filtering: if a market has already been initted and then 
+                            // There are event level files that betfair provide, which have every
+                            // market for an event
+                            // with filtering: if a market has already been initted and then
                             // changes then we must have a multi market file.
-                            let is_init = self.0.market_id.len() > 0;
+                            let is_init = !self.0.market_id.is_empty();
                             if self.0.market_id.set_if_ne(map.next_value::<&str>()?) && is_init {
-                                return Err(Error::custom("multiple markets per file is not supported"));
+                                return Err(Error::custom(
+                                    "multiple markets per file is not supported",
+                                ));
                             }
                         }
                         Field::MarketDefinition => {
@@ -430,7 +429,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                             self.2,
                         ))?,
                         Field::Tv => {
-                            if self.2.cumulative_runner_tv == false {
+                            if !self.2.cumulative_runner_tv {
                                 self.0.total_matched += map.next_value::<f64>()?;
                             } else {
                                 map.next_value::<IgnoredAny>()?;
@@ -461,8 +460,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
             }
         }
 
-        const FIELDS: &'static [&'static str] =
-            &["id", "marketDefinition", "rc", "con", "img", "tv"];
+        const FIELDS: &[&str] = &["id", "marketDefinition", "rc", "con", "img", "tv"];
         deserializer.deserialize_struct(
             "MarketChange",
             FIELDS,
@@ -579,13 +577,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             self.0.event_id = map
                                 .next_value::<&str>()?
                                 .parse()
-                                .map_err(|err| de::Error::custom(err))?;
+                                .map_err(de::Error::custom)?;
                         }
                         Field::EventTypeId => {
                             self.0.event_type_id = map
                                 .next_value::<&str>()?
                                 .parse()
-                                .map_err(|err| de::Error::custom(err))?;
+                                .map_err(de::Error::custom)?;
                         }
                         Field::Version => self.0.version = map.next_value()?,
                         Field::Runners => map.next_value_seed(PyRunnerDefSeq(
@@ -604,7 +602,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.market_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .map_err(|err| de::Error::custom(err))?
+                                    .map_err(de::Error::custom)?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -616,7 +614,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.suspend_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .map_err(|err| de::Error::custom(err))?
+                                    .map_err(de::Error::custom)?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -628,7 +626,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.settled_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .map_err(|err| de::Error::custom(err))?
+                                    .map_err(de::Error::custom)?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -640,7 +638,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             let s = map.next_value()?;
                             if self.0.open_date_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
-                                    .map_err(|err| de::Error::custom(err))?
+                                    .map_err(de::Error::custom)?
                                     .timestamp_millis()
                                     / 1000;
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
@@ -683,7 +681,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "keyLineDefiniton",
             "priceLadderDefinition",
             "raceType",
@@ -730,15 +728,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    
+
     // test disabled awaiting merge which fixes cargo test
     // https://github.com/PyO3/pyo3/pull/2135
-    /* 
+    /*
     use super::*;
-    
+
     #[test]
     fn test_multiple_markets() {
         let mut m = PyMarketBase::new("".to_owned(), "".to_owned());
@@ -752,5 +749,4 @@ mod tests {
         PyMarketMc(&mut m, py, config).deserialize(&mut deser).expect_err("2nd market_id deser error");
     }
     */
-
 }

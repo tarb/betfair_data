@@ -49,9 +49,10 @@ impl PriceSize {
 
 #[derive(Debug, Copy, Clone, Default)]
 pub struct F64OrStr(f64);
-impl Into<f64> for F64OrStr {
-    fn into(self) -> f64 {
-        self.0
+
+impl From<F64OrStr> for f64 {
+    fn from(v: F64OrStr) -> f64 {
+        v.0
     }
 }
 
@@ -90,7 +91,7 @@ impl<'de> Deserialize<'de> for F64OrStr {
                     _ => s
                         .parse()
                         .map_err(|_| Error::custom("invalid PriceSize string value"))
-                        .map(|v| F64OrStr(v)),
+                        .map(F64OrStr),
                 }
             }
         }
@@ -163,7 +164,7 @@ impl<'de> Deserialize<'de> for PriceSize {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &["price", "size"];
+        const FIELDS: &[&str] = &["price", "size"];
         deserializer.deserialize_struct("PriceSize", FIELDS, PriceSizeVisitor)
     }
 }
@@ -226,7 +227,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeBackLadder<'a> {
             }
         }
 
-        Ok(deserializer.deserialize_seq(PSVisitor(self.0))?)
+        deserializer.deserialize_seq(PSVisitor(self.0))
     }
 }
 
@@ -288,7 +289,7 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
             }
         }
 
-        Ok(deserializer.deserialize_seq(PSVisitor(self.0))?)
+        deserializer.deserialize_seq(PSVisitor(self.0))
     }
 }
 

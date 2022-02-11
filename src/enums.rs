@@ -99,7 +99,6 @@ pub enum PriceLadderDefinition {
     LineRange,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

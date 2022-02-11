@@ -78,7 +78,7 @@ mod tests {
 
     impl MarketSource for TestSource {
         fn source(&self) -> &str {
-            &self.source
+            self.source
         }
     }
 
