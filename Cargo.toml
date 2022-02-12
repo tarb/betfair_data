@@ -21,6 +21,8 @@ strum = { version = "0.23", features = ["derive"] }
 strum_macros = "0.23"
 chrono = "0.4.19"
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rayon", "nightly"]}
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
 mimalloc = { version = "*", default-features = false }
 
 [profile.release]

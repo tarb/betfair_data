@@ -12,7 +12,6 @@ mod tarbz2_source;
 
 use log::warn;
 use market::PyMarketBase;
-use mimalloc::MiMalloc;
 use price_size::PriceSize;
 use pyo3::exceptions;
 use pyo3::prelude::*;
@@ -21,9 +20,13 @@ use pyo3::PyIterProtocol;
 use source_iter::SourceIter;
 use tarbz2_source::TarBzSource;
 
+#[cfg(not(target_os = "linux"))]
+use mimalloc::MiMalloc;
+
 use crate::market::PyMarket;
 use crate::runner::{PyRunner, PyRunnerBookEX, PyRunnerBookSP};
 
+#[cfg(not(target_os = "linux"))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
