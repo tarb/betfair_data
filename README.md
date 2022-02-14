@@ -45,11 +45,11 @@ IDE's should automatically detect the types and provide checking and auto comple
 
 ## Benchmarks
 
-| Betfair Data (this) | [Betfairlightweight](https://github.com/liampauling/betfair/) |
-| -----------------  | --------------------|
-| 4m 12sec           | 1hour 1min 45sec    |
-| ~86 markets/sec    | ~6 markets/sec      |
-| ~661,000 updates/s | ~45,500 updates/sec |
+| Betfair Data (this)  | [Betfairlightweight](https://github.com/liampauling/betfair/) |
+| ---------------------|---------------------|
+| 3m 37sec             | 1hour 1min 45sec    |
+| ~101 markets/sec     | ~6 markets/sec      |
+| ~768,000 updates/sec | ~45,500 updates/sec |
 
 Benchmarks were run against 3 months of Australian racing markets comprising roughly 22,000 markets. Benchmarks were run on a M1 Macbook Pro with 32GB ram.
 

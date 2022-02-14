@@ -9,7 +9,7 @@ use staticvec::StaticString;
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::deser::{Deser, DeserializerWithData};
+use crate::deser::DeserializerWithData;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::ids::{EventID, EventTypeID, MarketID};
 use crate::runner::{PyRunner, PyRunnerChangeSeq, PyRunnerDefSeq};
@@ -224,10 +224,7 @@ impl PyMarket {
         config: SourceConfig,
         py: Python,
     ) -> Result<PyObject, DeserErr> {
-        let mut deser = DeserializerWithData::new(item.bs, |bs| {
-            Deser(serde_json::Deserializer::from_slice(bs))
-        });
-
+        let mut deser = item.deser;
         let mut base = PyMarketBase::new(item.source, item.file);
 
         match Self::drive_deserialize(&mut deser, &mut base, config, py) {

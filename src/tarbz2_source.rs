@@ -7,6 +7,7 @@ use tar::Archive;
 // use bzip2_rs::decoder::DecoderReader;
 use bzip2_rs::decoder::ParallelDecoderReader;
 
+use crate::deser::DeserializerWithData;
 use crate::{IOErr, MarketSource, SourceItem};
 
 pub struct TarBzSource {
@@ -16,7 +17,8 @@ pub struct TarBzSource {
 
 struct TarEntry {
     name: String,
-    bs: Vec<u8>,
+    // bs: Vec<u8>,
+    deser: DeserializerWithData,
 }
 
 impl MarketSource for TarBzSource {
@@ -45,10 +47,11 @@ impl TarBzSource {
                     // DecoderReader::new(entry)
                     let r =
                         ParallelDecoderReader::new(entry, bzip2_rs::RayonThreadPool, 1024 * 1024)
-                            .read_to_end(&mut buf);
+                            .read_to_end(&mut buf)
+                            .and_then(|_| DeserializerWithData::build(buf));
 
                     match r {
-                        Ok(_) => Ok(TarEntry { bs: buf, name }),
+                        Ok(deser) => Ok(TarEntry { name, deser }),
                         Err(err) => Err((err, Some(name))),
                     }
                 })
@@ -69,7 +72,11 @@ impl Iterator for TarBzSource {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.chan.recv().ok().map(|r| match r {
-            Ok(entry) => Ok(SourceItem::new(self.source.clone(), entry.name, entry.bs)),
+            Ok(entry) => Ok(SourceItem::new(
+                self.source.clone(),
+                entry.name,
+                entry.deser,
+            )),
             Err((err, name)) => Err(IOErr { file: name, err }),
         })
     }

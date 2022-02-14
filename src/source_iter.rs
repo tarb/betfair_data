@@ -66,7 +66,7 @@ impl<T: MarketSource> Iterator for SourceIter<T> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{IOErr, MarketSource, SourceItem};
+    use crate::{deser::DeserializerWithData, IOErr, MarketSource, SourceItem};
 
     use super::SourceIter;
 
@@ -90,7 +90,7 @@ mod tests {
                 Some(Ok(SourceItem::new(
                     "source".to_owned(),
                     "file".to_owned(),
-                    Vec::default(),
+                    DeserializerWithData::build(Vec::default()).unwrap(),
                 )))
             } else {
                 None

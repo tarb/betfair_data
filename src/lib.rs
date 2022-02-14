@@ -10,6 +10,7 @@ mod source_iter;
 mod strings;
 mod tarbz2_source;
 
+use deser::DeserializerWithData;
 use log::warn;
 use market::PyMarketBase;
 use price_size::PriceSize;
@@ -51,16 +52,20 @@ pub struct SourceConfig {
     pub stable_runner_index: bool,
 }
 
-#[derive(Debug)]
 pub struct SourceItem {
     pub source: String,
     pub file: String,
-    pub bs: Vec<u8>,
+    // pub bs: Vec<u8>,
+    pub deser: DeserializerWithData,
 }
 
 impl SourceItem {
-    pub fn new(source: String, file: String, bs: Vec<u8>) -> Self {
-        Self { source, file, bs }
+    pub fn new(source: String, file: String, deser: DeserializerWithData) -> Self {
+        Self {
+            source,
+            file,
+            deser,
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "betfair_data"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 
 [lib]
@@ -20,6 +20,8 @@ staticvec = { version = "0.11.2", features = ["serde"] }
 strum = { version = "0.23", features = ["derive"] }
 strum_macros = "0.23"
 chrono = "0.4.19"
+simdutf8 = { version = "0.1", features = ["std", "aarch64_neon"] }
+
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rayon", "nightly"]}
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
