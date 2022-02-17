@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use serde::{
-    de::{DeserializeSeed, Error, MapAccess, Visitor},
+    de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
 use serde_json::value::RawValue;
@@ -413,6 +413,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
                         Field::Trd => {
                             let mut ex = self.0.ex.borrow_mut(self.1);
                             map.next_value_seed(PriceSizeBackLadder(&mut ex.traded_volume))?;
+
+                            if self.2.cumulative_runner_tv {
+                                self.0.total_matched =
+                                    ex.traded_volume.iter().map(|ps| ps.size).sum();
+                            }
                         }
                         Field::Spb => {
                             let mut sp = self.0.sp.borrow_mut(self.1);
@@ -438,10 +443,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
                         // that need to be accumulated, whereas the stream sends the value itself.
                         Field::Tv => {
                             if self.2.cumulative_runner_tv {
-                                self.0.total_matched = {
-                                    let delta: f64 = map.next_value::<F64OrStr>()?.into();
-                                    self.0.total_matched + delta
-                                };
+                                map.next_value::<IgnoredAny>()?;
                             } else {
                                 self.0.total_matched = map.next_value::<F64OrStr>()?.into();
                             }

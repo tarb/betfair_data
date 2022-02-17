@@ -126,3 +126,7 @@ class TarBz2(Iterator[Market]):
     """"""
     def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None:
         """"""
+class Files(Iterator[Market]):
+    """"""
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None:
+        """"""

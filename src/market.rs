@@ -8,6 +8,7 @@ use serde::{
 use staticvec::StaticString;
 use std::borrow::Cow;
 use std::fmt;
+use std::path::PathBuf;
 
 use crate::deser::DeserializerWithData;
 use crate::enums::{MarketBettingType, MarketStatus};
@@ -21,9 +22,7 @@ use crate::{strings::StringSetExtNeq, SourceConfig};
 #[pyclass(name = "MarketImage", subclass)]
 pub struct PyMarketBase {
     #[pyo3(get)]
-    source: String,
-    #[pyo3(get)]
-    file: String,
+    file: PathBuf,
     #[pyo3(get)]
     bet_delay: u16,
     #[pyo3(get)]
@@ -95,9 +94,8 @@ pub struct PyMarketBase {
 }
 
 impl PyMarketBase {
-    fn new(source: String, file: String) -> Self {
+    fn new(file: PathBuf) -> Self {
         Self {
-            source,
             file,
             bsp_market: false,
             turn_in_play_enabled: false,
@@ -148,7 +146,6 @@ impl PyMarketBase {
             .collect::<Vec<_>>();
 
         Self {
-            source: self.source.clone(),
             file: self.file.clone(),
             bsp_market: self.bsp_market,
             turn_in_play_enabled: self.turn_in_play_enabled,
@@ -225,7 +222,7 @@ impl PyMarket {
         py: Python,
     ) -> Result<PyObject, DeserErr> {
         let mut deser = item.deser;
-        let mut base = PyMarketBase::new(item.source, item.file);
+        let mut base = PyMarketBase::new(item.file);
 
         match Self::drive_deserialize(&mut deser, &mut base, config, py) {
             Ok(()) => {
@@ -236,7 +233,6 @@ impl PyMarket {
                 Ok(Py::new(py, (market, base)).unwrap().into_py(py))
             }
             Err(err) => Err(DeserErr {
-                source: base.source,
                 file: base.file,
                 err,
             }),
@@ -266,7 +262,7 @@ impl PyMarket {
             .map(|_| true)
             .unwrap_or_else(|err| {
                 if !err.is_eof() {
-                    warn!(target: "betfair_data", "source: {} file: {} err: (JSON Parse Error) {}", base.source, base.file, err);
+                    warn!(target: "betfair_data", "file: {} err: (JSON Parse Error) {}", base.file.to_string_lossy(), err);
                 }
 
                 false
@@ -388,6 +384,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
             Con,
             Img,
             Tv,
+
+            // bflw recorded field
+            #[serde(rename = "_stream_id")]
+            StreamId,
         }
 
         struct PyMarketMcVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
@@ -436,6 +436,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                             map.next_value::<IgnoredAny>()?;
                         }
                         Field::Img => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                        _ => {
                             map.next_value::<IgnoredAny>()?;
                         }
                     }
