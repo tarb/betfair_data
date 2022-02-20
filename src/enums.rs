@@ -1,7 +1,10 @@
 #![allow(deprecated)]
 
+use pyo3::{types::PyUnicode, Python, IntoPy, PyObject};
 use serde::{Deserialize, Serialize};
 use strum_macros::{AsRefStr, IntoStaticStr};
+use std::lazy::SyncOnceCell;
+
 
 #[derive(
     Debug, Default, PartialEq, Copy, Clone, Serialize, Deserialize, AsRefStr, IntoStaticStr,
@@ -20,6 +23,21 @@ pub enum MarketStatus {
     #[strum(serialize = "CLOSED")]
     #[serde(rename = "CLOSED")]
     Closed,
+}
+
+static MARKET_STATUS_INTERNED: SyncOnceCell<[PyObject; std::mem::variant_count::<MarketStatus>()]> = SyncOnceCell::new();
+impl IntoPy<PyObject> for MarketStatus {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        MARKET_STATUS_INTERNED.get_or_init(|| {
+            [
+                PyUnicode::new(py, MarketStatus::InActive.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketStatus::Open.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketStatus::Suspended.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketStatus::Closed.as_ref()).into_py(py),
+            ]
+        })
+        [self as usize].clone_ref(py)
+    }
 }
 
 #[derive(
@@ -48,6 +66,24 @@ pub enum SelectionStatus {
     #[strum(serialize = "HIDDEN")]
     #[serde(rename = "HIDDEN")]
     Hidden,
+}
+
+static SELECTION_STATUS_INTERNED: SyncOnceCell<[PyObject; std::mem::variant_count::<SelectionStatus>()]> = SyncOnceCell::new();
+impl IntoPy<PyObject> for SelectionStatus {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        SELECTION_STATUS_INTERNED.get_or_init(|| {
+            [
+                PyUnicode::new(py, SelectionStatus::Active.as_ref()).into_py(py),
+                PyUnicode::new(py, SelectionStatus::Removed.as_ref()).into_py(py),
+                PyUnicode::new(py, SelectionStatus::RemovedVacant.as_ref()).into_py(py),
+                PyUnicode::new(py, SelectionStatus::Winner.as_ref()).into_py(py),
+                PyUnicode::new(py, SelectionStatus::Placed.as_ref()).into_py(py),
+                PyUnicode::new(py, SelectionStatus::Loser.as_ref()).into_py(py),
+                PyUnicode::new(py, SelectionStatus::Hidden.as_ref()).into_py(py),
+            ]
+        })
+        [self as usize].clone_ref(py)
+    }
 }
 
 #[derive(
@@ -80,6 +116,23 @@ pub enum MarketBettingType {
     #[strum(serialize = "FIXED_ODDS")]
     #[serde(rename = "FIXED_ODDS")]
     FixedOdds,
+}
+
+static MARKET_BETTING_TYPE_INTERNED: SyncOnceCell<[PyObject; std::mem::variant_count::<MarketBettingType>()]> = SyncOnceCell::new();
+impl IntoPy<PyObject> for MarketBettingType {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        MARKET_BETTING_TYPE_INTERNED.get_or_init(|| {
+            [
+                PyUnicode::new(py, MarketBettingType::Odds.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketBettingType::Line.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketBettingType::Range.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketBettingType::AsianHandicapDoubleLine.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketBettingType::AsianHandicapSingleLine.as_ref()).into_py(py),
+                PyUnicode::new(py, MarketBettingType::FixedOdds.as_ref()).into_py(py),
+            ]
+        })
+        [self as usize].clone_ref(py)
+    }
 }
 
 #[derive(

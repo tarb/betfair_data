@@ -13,12 +13,11 @@ use std::path::PathBuf;
 use crate::deser::DeserializerWithData;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::ids::{EventID, EventTypeID, MarketID};
-use crate::runner::{PyRunner, PyRunnerChangeSeq, PyRunnerDefSeq};
-use crate::DeserErr;
-use crate::SourceItem;
-use crate::{strings::StringSetExtNeq, SourceConfig};
+use crate::errors::DeserErr;
+use crate::market_source::{SourceItem, SourceConfig};
+use crate::strings::StringSetExtNeq;
+use crate::mutable::runner::{PyRunner, PyRunnerChangeSeq, PyRunnerDefSeq};
 
-#[derive(Clone)]
 #[pyclass(name = "MarketImage", subclass)]
 pub struct PyMarketBase {
     #[pyo3(get)]
@@ -76,6 +75,10 @@ pub struct PyMarketBase {
     #[pyo3(get)]
     runners: Vec<Py<PyRunner>>,
     #[pyo3(get)]
+    status: MarketStatus,
+    #[pyo3(get)]
+    betting_type: MarketBettingType,
+    #[pyo3(get)]
     market_time: i64,
     market_time_str: StaticString<24>,
     #[pyo3(get)]
@@ -87,10 +90,9 @@ pub struct PyMarketBase {
     #[pyo3(get)]
     settled_time: Option<i64>,
     settled_time_str: Option<StaticString<24>>,
+    // need getters
     market_id: MarketID,
-    status: MarketStatus,
     country_code: StaticString<2>,
-    betting_type: MarketBettingType,
 }
 
 impl PyMarketBase {
@@ -195,17 +197,10 @@ impl PyMarketBase {
     fn market_id(&self) -> &str {
         self.market_id.as_ref()
     }
-    #[getter(status)]
-    fn status(&self) -> &'static str {
-        self.status.into()
-    }
+
     #[getter(country_code)]
     fn country(&self) -> &str {
         self.country_code.as_str()
-    }
-    #[getter(betting_type)]
-    fn betting_type_fn(&self) -> &'static str {
-        self.betting_type.into()
     }
 }
 
@@ -603,10 +598,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             if self.0.market_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
                                     .map_err(de::Error::custom)?
-                                    .timestamp_millis()
-                                    / 1000;
-                                // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                // self.0.market_time = Some(d.into_py(self.1));
+                                    .timestamp_millis();
+
                                 self.0.market_time = ts;
                             }
                         }

@@ -10,10 +10,10 @@ use std::io::Read;
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
 use std::thread;
-// use std::io::{BufReader};
 
 use crate::deser::DeserializerWithData;
-use crate::{IOErr, MarketSource, SourceConfig, SourceItem};
+use crate::errors::IOErr;
+use crate::market_source::{MarketSource, SourceConfig, SourceItem};
 
 #[pyclass]
 pub struct Files {

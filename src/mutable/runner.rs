@@ -1,19 +1,22 @@
 use pyo3::prelude::*;
-use serde::{
-    de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor},
-    Deserialize, Deserializer,
-};
+use serde::de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 use staticvec::StaticString;
 use std::{borrow::Cow, fmt};
 
+use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
-use crate::price_size::{F64OrStr, PriceSize, PriceSizeBackLadder, PriceSizeLayLadder};
+use crate::market_source::SourceConfig;
+use crate::price_size::{F64OrStr, PriceSize};
+use crate::mutable::price_size::{PriceSizeBackLadder, PriceSizeLayLadder};
+
 use crate::strings::StringSetExtNeq;
-use crate::{enums::SelectionStatus, SourceConfig};
 
 #[pyclass(name = "Runner")]
 pub struct PyRunner {
+    #[pyo3(get)]
+    pub status: SelectionStatus,
     #[pyo3(get)]
     pub selection_id: SelectionID,
     #[pyo3(get)]
@@ -37,8 +40,6 @@ pub struct PyRunner {
     // removal_date: Option<Py<PyDateTime>>,
     pub removal_date_str: Option<StaticString<24>>,
 
-    // requires a getter
-    pub status: SelectionStatus,
 }
 
 impl PyRunner {
@@ -80,14 +81,6 @@ impl PyRunner {
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
         }
-    }
-}
-
-#[pymethods]
-impl PyRunner {
-    #[getter(status)]
-    fn status(&self) -> &'static str {
-        self.status.into()
     }
 }
 
@@ -254,8 +247,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
                             if self.0.removal_date_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
                                     .map_err(Error::custom)?
-                                    .timestamp_millis()
-                                    / 1000;
+                                    .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
                                 // self.0.removal_date = Some(d.into_py(self.1));
                                 self.0.removal_date = Some(ts);
