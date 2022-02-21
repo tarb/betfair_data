@@ -2,6 +2,7 @@ use log::warn;
 use pyo3::prelude::*;
 use std::path::PathBuf;
 
+// use crate::bflw::iter::BflwIter;
 use crate::deser::DeserializerWithData;
 use crate::errors::DeserErr;
 use crate::errors::IOErr;
@@ -17,6 +18,8 @@ pub trait MarketSource: pyo3::PyClass {
             match slf.get() {
                 Some(Ok(si)) => {
                     let mi = PyMarket::new_object(si, slf.config(), slf.py());
+                    // let mi = BflwIter::new_object(si, slf.config(), slf.py());
+                    // break Some(mi);
 
                     match mi {
                         Ok(mi) => break Some(mi),

@@ -28,7 +28,11 @@ mod tarbz2_source;
 
 use crate::mutable::market::{PyMarket, PyMarketBase};
 use crate::mutable::runner::{PyRunner, PyRunnerBookEX, PyRunnerBookSP};
-
+use crate::bflw::iter::BflwIter;
+use crate::bflw::market_book::MarketBook;
+use crate::bflw::market_definition::MarketDefinition;
+use crate::bflw::market_definition_runner::MarketDefinitionRunner;
+use crate::bflw::runner_book::RunnerBook;
 use crate::files_source::Files;
 use crate::price_size::PriceSize;
 use crate::tarbz2_source::TarBz2;
@@ -59,6 +63,12 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_submodule(mutable)?;
 
     let bflw = PyModule::new(py, "bflw")?;
+    bflw.add_class::<BflwIter>()?;
+    bflw.add_class::<MarketBook>()?;
+    bflw.add_class::<MarketDefinitionRunner>()?;
+    bflw.add_class::<MarketDefinition>()?;
+    bflw.add_class::<RunnerBook>()?;
+
     m.add_submodule(bflw)?;
 
     Ok(())

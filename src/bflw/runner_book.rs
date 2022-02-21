@@ -1,25 +1,20 @@
 use core::fmt;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
-use serde::de::{Error, IgnoredAny};
-use serde::{
-    de::{DeserializeSeed, MapAccess, Visitor},
-    Deserialize, Deserializer,
-};
+use serde::de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor};
+use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
+use super::datetime::DateTimeString;
+use super::market_definition_runner::MarketDefRunnerUpdate;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::container::{PyRep, SyncObj};
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
-use crate::market_source::SourceConfig;
-use crate::price_size::{F64OrStr, PriceSize};
-
 use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
 use crate::immutable::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
-
-use super::datetime::DateTimeString;
-use super::market_definition_runner::MarketDefRunnerUpdate;
+use crate::market_source::SourceConfig;
+use crate::price_size::{F64OrStr, PriceSize};
 
 #[pyclass]
 pub struct RunnerBook {
@@ -97,12 +92,14 @@ impl RunnerBook {
     }
 
     pub fn update_from_def(&self, change: &MarketDefRunnerUpdate, py: Python) -> Self {
-
         // need to update sp obj with bsp value
         let sp = if change.bsp.is_some() {
             let sp = self.sp.borrow(py);
             if sp.actual_sp != change.bsp {
-                let upt = RunnerBookSPUpdate { actual_sp: change.bsp, ..Default::default() };
+                let upt = RunnerBookSPUpdate {
+                    actual_sp: change.bsp,
+                    ..Default::default()
+                };
                 sp.update(upt, py)
             } else {
                 self.sp.clone_ref(py)
@@ -110,7 +107,7 @@ impl RunnerBook {
         } else {
             self.sp.clone_ref(py)
         };
-        
+
         Self {
             selection_id: self.selection_id,
             status: change.status,
@@ -138,7 +135,7 @@ impl RunnerBook {
 }
 
 pub struct RunnerChangeSeq<'a, 'py>(
-    pub &'a Vec<Py<RunnerBook>>,
+    pub Option<&'a Vec<Py<RunnerBook>>>,
     pub Python<'py>,
     pub SourceConfig,
 );
@@ -149,7 +146,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(&'a Vec<Py<RunnerBook>>, Python<'py>, SourceConfig);
+        struct RunnerSeqVisitor<'a, 'py>(Option<&'a Vec<Py<RunnerBook>>>, Python<'py>, SourceConfig);
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = Vec<Py<RunnerBook>>;
 
@@ -161,11 +158,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
+                // TODO - maybe move to lazy cloning this vec if we detect that the output would actually change
                 let mut v = self
                     .0
-                    .iter()
-                    .map(|r| r.clone_ref(self.1))
-                    .collect::<Vec<_>>();
+                    .map(|v| 
+                        v.iter()
+                        .map(|r| r.clone_ref(self.1))
+                        .collect::<Vec<_>>()
+                    )
+                    .unwrap_or_else(|| Vec::with_capacity(10));
 
                 #[derive(Deserialize)]
                 struct RunnerWithID {
@@ -184,10 +185,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 
                     match index {
                         Some(index) => {
-                            let runner = unsafe { self.0.get_unchecked(index).borrow(self.1) };
-                            let runner = RunnerBookChangeDeser(&runner, self.1, self.2)
-                                .deserialize(&mut deser)
-                                .map_err(Error::custom)?;
+                            let runner = {
+                                let runner = unsafe { v.get_unchecked(index).borrow(self.1) };
+                                RunnerBookChangeDeser(&runner, self.1, self.2)
+                                    .deserialize(&mut deser)
+                                    .map_err(Error::custom)?
+                            };
 
                             v[index] = Py::new(self.1, runner).unwrap();
                         }

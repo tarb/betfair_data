@@ -1,0 +1,6 @@
+from typing import Iterator
+
+class BflwIter(Iterator[MarketBook]):
+    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True) -> None: ...
+
+class MarketBook: ...

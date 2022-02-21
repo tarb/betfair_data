@@ -1,4 +1,4 @@
-use pyo3::{types::PyTuple, Py, PyAny, PyObject, PyResult, Python};
+use pyo3::{types::PyTuple, Py, PyAny, PyObject, PyResult, Python, ToPyObject, IntoPy};
 use std::{lazy::SyncOnceCell, ops::Deref};
 
 use crate::immutable::container::{PyRep, SyncObj};
@@ -20,6 +20,7 @@ fn date_time(ts: i64, py: Python) -> PyResult<PyObject> {
     let tuple = PyTuple::new(py, a.into_iter());
     dtc.call_method1(py, "utcfromtimestamp", tuple)
 }
+#[derive( Debug)]
 
 pub struct DateTimeString {
     str: String,
@@ -81,7 +82,7 @@ impl PartialEq<SyncObj<DateTimeString>> for &str {
 
 
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct DateTime(u64);
 
 impl DateTime {
@@ -107,5 +108,17 @@ impl Deref for DateTime {
 impl PartialEq<u64> for DateTime {
     fn eq(&self, ts: &u64) -> bool {
         self.0 == *ts
+    }
+}
+
+impl ToPyObject for DateTime {
+    fn to_object(&self, py: Python) -> PyObject {
+        date_time(self.0 as i64, py).unwrap_or_else(|_| py.None())
+    }
+}
+
+impl IntoPy<PyObject> for DateTime {
+    fn into_py(self, py: Python) -> PyObject {
+        self.to_object(py)
     }
 }

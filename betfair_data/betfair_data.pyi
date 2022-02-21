@@ -1,5 +1,8 @@
 from typing import Iterator, List, Sequence, Optional
 
+
+
+
 class MarketImage():
     """
     A class representing a Betfair Market.
@@ -70,7 +73,7 @@ class MarketImage():
 
 
 class Market(MarketImage):
-    def update(self) -> bool:
+    def update(self) -> bool: 
         """ Update the market with the next delta
 
         Example:
@@ -118,15 +121,22 @@ class RunnerBookSP():
     back_stake_taken: List[PriceSize]
     lay_liability_taken: List[PriceSize]
 
+
+
 class PriceSize():
     price: float
     size: float
 
 class TarBz2(Iterator[Market]):
     """"""
-    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None:
-        """"""
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
+
 class Files(Iterator[Market]):
     """"""
-    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None:
-        """"""
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
+
+
+
+
+
+

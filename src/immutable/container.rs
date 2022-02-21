@@ -28,7 +28,7 @@ impl PyRep for MarketID {
 
 
 
-
+#[derive(Debug)]
 pub struct SyncObj<T> {
     pub value: Arc<T>,
     py: SyncOnceCell<PyObject>,
