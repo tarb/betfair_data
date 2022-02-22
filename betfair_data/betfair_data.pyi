@@ -1,8 +1,6 @@
 from typing import Iterator, List, Sequence, Optional
 
 
-
-
 class MarketImage():
     """
     A class representing a Betfair Market.

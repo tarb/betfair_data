@@ -608,8 +608,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             if self.0.suspend_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
                                     .map_err(de::Error::custom)?
-                                    .timestamp_millis()
-                                    / 1000;
+                                    .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
                                 // self.0.suspend_time = Some(d.into_py(self.1));
                                 self.0.suspend_time = Some(ts);
@@ -620,8 +619,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             if self.0.settled_time_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
                                     .map_err(de::Error::custom)?
-                                    .timestamp_millis()
-                                    / 1000;
+                                    .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
                                 // self.0.settled_time = Some(d.into_py(self.1));
                                 self.0.settled_time = Some(ts);
@@ -632,8 +630,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                             if self.0.open_date_str.set_if_ne(s) {
                                 let ts = chrono::DateTime::parse_from_rfc3339(s)
                                     .map_err(de::Error::custom)?
-                                    .timestamp_millis()
-                                    / 1000;
+                                    .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
                                 // self.0.open_date = Some(d.into_py(self.1));
                                 self.0.open_date = ts;
