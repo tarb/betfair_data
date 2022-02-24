@@ -69,7 +69,6 @@ class MarketImage():
     venue: Optional[str]
     version: int
 
-
 class Market(MarketImage):
     """"""
     def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
@@ -122,16 +121,12 @@ class RunnerBookSP():
     back_stake_taken: List[PriceSize]
     lay_liability_taken: List[PriceSize]
 
-
 class PriceSize():
     price: float
     size: float
 
-
-
 # sources
 class MutableAdapter(Iterator[Market]): ...
-
 
 class TarBz2():
     """"""

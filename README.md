@@ -27,7 +27,7 @@ paths = [
 market_count = 0
 update_count = 0
 
-for market in betfair_data.TarBz2(paths):
+for market in betfair_data.TarBz2(paths).mutable():
     market_count += 1
     update_count += 1
     

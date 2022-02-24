@@ -2,12 +2,10 @@ from datetime import datetime
 from typing import Iterator, Optional, Sequence, str
 import betfair_data
 
-
 class BflwAdapter(Iterator[BflwIter]): ...
 
 class BflwIter(Iterator[Sequence[MarketBook]]):
     def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True) -> None: ...
-
     file_name: str
 
 class MarketBook:
