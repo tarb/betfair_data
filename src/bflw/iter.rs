@@ -9,7 +9,8 @@ use crate::market_source::{SourceConfig, SourceItem};
 
 #[pyclass(name = "BflwIter")]
 pub struct BflwIter {
-    file: PathBuf,
+    #[pyo3(get)]
+    file_name: PathBuf,
     config: SourceConfig,
     deser: Option<DeserializerWithData>,
     books: Vec<Py<MarketBook>>,
@@ -18,7 +19,7 @@ pub struct BflwIter {
 impl BflwIter {
     pub fn new_object(item: SourceItem, config: SourceConfig, py: Python) -> PyObject {
         BflwIter {
-            file: item.file,
+            file_name: item.file,
             deser: Some(item.deser),
             books: Vec::new(),
             config,
@@ -45,19 +46,19 @@ impl BflwIter {
     fn __new__(file: PathBuf, bytes: &[u8], cumulative_runner_tv: bool) -> PyResult<Self> {
         let config = SourceConfig {
             cumulative_runner_tv,
-            stable_runner_index: false,
         };
 
         let deser = DeserializerWithData::build(bytes.to_owned())
             .map_err(|err| PyErr::new::<exceptions::PyRuntimeError, _>(err.to_string()))?;
 
         Ok(BflwIter {
-            file,
+            file_name: file,
             deser: Some(deser),
             books: Vec::new(),
             config,
         })
     }
+
 }
 
 #[pyproto]
@@ -77,7 +78,7 @@ impl<'p> PyIterProtocol for BflwIter {
                 Ok(bs) => Some(bs),
                 Err(err) => {
                     if !err.is_eof() {
-                        warn!(target: "betfair_data", "file: {} err: (JSON Parse Error) {}", slf.file.to_string_lossy(), err);
+                        warn!(target: "betfair_data", "file: {} err: (JSON Parse Error) {}", slf.file_name.to_string_lossy(), err);
                     }
 
                     None
@@ -86,22 +87,25 @@ impl<'p> PyIterProtocol for BflwIter {
 
             slf.deser = Some(deser);
 
-            
             next_books
         };
-        
+
         // update the books for this files
         if let Some(next_books) = &next_books {
             let py = slf.py();
 
-            let mut books = slf.books.iter().map(|b| b.clone_ref(py) ).collect::<Vec<_>>();
+            let mut books = slf
+                .books
+                .iter()
+                .map(|b| b.clone_ref(py))
+                .collect::<Vec<_>>();
             next_books.iter().for_each(|m1| {
                 let mb1 = m1.borrow(py);
                 let id1 = mb1.market_id.value.as_ref().as_str();
 
-                let replace = books.iter_mut().position(|m2| {
-                    id1 == (*m2).borrow(py).market_id.value.as_ref().as_str()
-                });
+                let replace = books
+                    .iter_mut()
+                    .position(|m2| id1 == (*m2).borrow(py).market_id.value.as_ref().as_str());
 
                 match replace {
                     Some(i) => books[i] = m1.clone_ref(py),

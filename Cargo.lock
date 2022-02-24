@@ -34,7 +34,7 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "betfair_data"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "bzip2-rs",
  "chrono",
@@ -46,6 +46,7 @@ dependencies = [
  "pyo3",
  "pyo3-log",
  "rayon",
+ "rayon-seq-iter",
  "self_cell",
  "serde",
  "serde_json",
@@ -536,6 +537,14 @@ dependencies = [
  "crossbeam-utils",
  "lazy_static",
  "num_cpus",
+]
+
+[[package]]
+name = "rayon-seq-iter"
+version = "0.1.0-SNAPSHOT"
+source = "git+https://github.com/nwtgck/rayon-seq-iter#d3582ce853e3b205a880cb6862569934c9984feb"
+dependencies = [
+ "rayon",
 ]
 
 [[package]]

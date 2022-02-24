@@ -1,5 +1,5 @@
 from typing import Iterator, List, Sequence, Optional
-
+from betfair_data import bflw
 
 class MarketImage():
     """
@@ -71,6 +71,9 @@ class MarketImage():
 
 
 class Market(MarketImage):
+    """"""
+    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
+
     def update(self) -> bool: 
         """ Update the market with the next delta
 
@@ -120,21 +123,27 @@ class RunnerBookSP():
     lay_liability_taken: List[PriceSize]
 
 
-
 class PriceSize():
     price: float
     size: float
 
-class TarBz2(Iterator[Market]):
+
+
+# sources
+class MutableAdapter(Iterator[Market]): ...
+
+
+class TarBz2():
     """"""
-    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
 
-class Files(Iterator[Market]):
+    def mutable(self, stable_runner_index = True) -> MutableAdapter: ...
+    def bflw(self) -> bflw.BflwAdapter: ...
+
+
+class Files():
     """"""
-    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
 
-
-
-
-
-
+    def mutable(self, stable_runner_index = True) -> MutableAdapter: ...
+    def bflw(self) -> bflw.BflwAdapter: ...

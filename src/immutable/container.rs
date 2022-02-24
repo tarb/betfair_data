@@ -1,8 +1,11 @@
-use std::{sync::Arc};
-use pyo3::{prelude::*, types::{PyList, PyUnicode}};
+use pyo3::{
+    prelude::*,
+    types::{PyList, PyUnicode},
+};
 use std::lazy::SyncOnceCell;
+use std::sync::Arc;
 
-use crate::{price_size::PriceSize, ids::MarketID};
+use crate::{ids::MarketID, price_size::PriceSize};
 
 pub trait PyRep {
     fn py_rep(&self, py: Python) -> PyObject;
@@ -26,7 +29,11 @@ impl PyRep for MarketID {
     }
 }
 
-
+impl PyRep for Vec<String> {
+    fn py_rep(&self, py: Python) -> PyObject {
+        PyList::new(py, self.iter().map(|ps| ps.into_py(py))).into_py(py)
+    }
+}
 
 #[derive(Debug)]
 pub struct SyncObj<T> {

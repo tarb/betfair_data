@@ -1,47 +1,32 @@
 use bzip2_rs::decoder::ParallelDecoderReader;
 use crossbeam_channel::{bounded, Receiver};
 use flate2::bufread::GzDecoder;
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PySequence, PyString};
-use pyo3::PyIterProtocol;
-use rayon::prelude::*;
 use std::fs::File;
 use std::io::Read;
 use std::io::{Error, ErrorKind};
 use std::path::PathBuf;
-use std::thread;
 
+use crate::bflw::adapter::BflwAdapter;
 use crate::deser::DeserializerWithData;
 use crate::errors::IOErr;
 use crate::market_source::{MarketSource, SourceConfig, SourceItem};
+use crate::mutable::adapter::MutAdapter;
 
 #[pyclass]
 pub struct Files {
-    sources: FilesSource,
-    config: SourceConfig,
-}
-
-impl MarketSource for Files {
-    fn config(&self) -> SourceConfig {
-        self.config
-    }
-    fn get(&mut self) -> Option<Result<SourceItem, IOErr>> {
-        self.sources.chan.recv().ok()
-    }
+    source: Option<FilesSource>,
 }
 
 #[pymethods]
 impl Files {
     #[new]
-    #[args(cumulative_runner_tv = "true", stable_runner_index = "true")]
-    fn __new__(
-        paths: &PySequence,
-        cumulative_runner_tv: bool,
-        stable_runner_index: bool,
-    ) -> PyResult<Self> {
+    #[args(cumulative_runner_tv = "true")]
+    fn __new__(paths: &PySequence, cumulative_runner_tv: bool) -> PyResult<Self> {
         let config = SourceConfig {
             cumulative_runner_tv,
-            stable_runner_index,
         };
 
         let sources = (0..paths.len().unwrap_or(0))
@@ -51,42 +36,64 @@ impl Files {
             .map(PathBuf::from)
             .collect::<Vec<_>>();
 
-        let fs = FilesSource::new(sources)?;
+        let fs = FilesSource::new(sources, config)?;
 
-        Ok(Self {
-            config,
-            sources: fs,
-        })
-    }
-}
-
-#[pyproto]
-impl<'p> PyIterProtocol for Files {
-    fn __iter__(slf: PyRef<'p, Self>) -> PyRef<'p, Self> {
-        slf
+        Ok(Self { source: Some(fs) })
     }
 
-    fn __next__(slf: PyRefMut<'p, Self>) -> Option<PyObject> {
-        MarketSource::next(slf)
+    #[pyo3(name = "mutable")]
+    #[args(stable_runner_index = "true")]
+    fn mut_market_adapter(&mut self, stable_runner_index: bool) -> PyResult<MutAdapter> {
+        let source = self.source.take();
+
+        match source {
+            Some(s) => Ok(MutAdapter::new(Box::new(s), stable_runner_index)),
+            None => Err(PyRuntimeError::new_err("empty source")),
+        }
+    }
+
+    #[pyo3(name = "bflw")]
+    fn bflw_adapter(&mut self) -> PyResult<BflwAdapter> {
+        let source = self.source.take();
+
+        match source {
+            Some(s) => Ok(BflwAdapter::new(Box::new(s))),
+            None => Err(PyRuntimeError::new_err("empty source")),
+        }
     }
 }
 
 struct FilesSource {
     chan: Receiver<Result<SourceItem, IOErr>>,
+    config: SourceConfig,
+}
+
+impl MarketSource for FilesSource {
+    fn config(&self) -> SourceConfig {
+        self.config
+    }
+}
+
+impl Iterator for FilesSource {
+    type Item = Result<SourceItem, IOErr>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chan.recv().ok()
+    }
 }
 
 impl FilesSource {
-    fn new(paths: Vec<PathBuf>) -> Result<Self, Error> {
-        let (data_send, data_recv) = bounded(30);
+    fn new(paths: Vec<PathBuf>, config: SourceConfig) -> Result<Self, Error> {
+        const BUFFER_SIZE: usize = 50;
+        let (data_send, data_recv) = bounded(BUFFER_SIZE);
 
-        thread::spawn(move || -> Result<(), Error> {
+        rayon::spawn(move || {
             let _ = paths
-                .into_par_iter()
+                .into_iter()
                 .map(|path| {
                     let buf: Result<Vec<u8>, Error> = try {
                         let mut file = File::open(&path)?;
                         let file_size = file.metadata()?.len();
-                        // let mut bf_file = BufReader::new(file);
 
                         let mut buf: Vec<u8> = Vec::with_capacity(file_size as usize);
                         file.read_to_end(&mut buf)?;
@@ -99,6 +106,7 @@ impl FilesSource {
                             file: Some(path),
                             err,
                         }),
+
                         Ok(buf) => {
                             let r = match path.extension().and_then(|s| s.to_str()) {
                                 Some("gz") => {
@@ -137,11 +145,14 @@ impl FilesSource {
                         }
                     }
                 })
-                .try_for_each(|r| data_send.send(r));
-
-            Ok(())
+                .try_for_each(|r| {
+                    data_send.send(r)
+                });
         });
 
-        Ok(Self { chan: data_recv })
+        Ok(Self {
+            chan: data_recv,
+            config,
+        })
     }
 }

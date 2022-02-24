@@ -1,5 +1,5 @@
 use log::warn;
-use pyo3::prelude::*;
+use pyo3::{exceptions, prelude::*};
 use serde::de::{Error, IgnoredAny};
 use serde::{
     de::{self, DeserializeSeed, MapAccess, Visitor},
@@ -12,11 +12,13 @@ use std::path::PathBuf;
 
 use crate::deser::DeserializerWithData;
 use crate::enums::{MarketBettingType, MarketStatus};
-use crate::ids::{EventID, EventTypeID, MarketID};
 use crate::errors::DeserErr;
-use crate::market_source::{SourceItem, SourceConfig};
-use crate::strings::StringSetExtNeq;
+use crate::ids::{EventID, EventTypeID, MarketID};
+use crate::market_source::{SourceItem};
 use crate::mutable::runner::{PyRunner, PyRunnerChangeSeq, PyRunnerDefSeq};
+use crate::strings::StringSetExtNeq;
+
+use super::config::Config;
 
 #[pyclass(name = "MarketImage", subclass)]
 pub struct PyMarketBase {
@@ -207,13 +209,13 @@ impl PyMarketBase {
 #[pyclass(name="Market", extends=PyMarketBase)]
 pub struct PyMarket {
     deser: Option<DeserializerWithData>,
-    config: SourceConfig,
+    config: Config,
 }
 
 impl PyMarket {
     pub fn new_object(
         item: SourceItem,
-        config: SourceConfig,
+        config: Config,
         py: Python,
     ) -> Result<PyObject, DeserErr> {
         let mut deser = item.deser;
@@ -237,7 +239,7 @@ impl PyMarket {
     fn drive_deserialize(
         deser: &mut DeserializerWithData,
         base: &mut PyMarketBase,
-        config: SourceConfig,
+        config: Config,
         py: Python,
     ) -> Result<(), serde_json::Error> {
         deser.with_dependent_mut(|_, deser| {
@@ -248,6 +250,36 @@ impl PyMarket {
 
 #[pymethods]
 impl PyMarket {
+    #[new]
+    #[args(cumulative_runner_tv = "true", stable_runner_index = "true")]
+    fn __new__(
+        file: PathBuf,
+        bytes: &[u8],
+        cumulative_runner_tv: bool,
+        stable_runner_index: bool,
+        py: Python,
+    ) -> PyResult<(Self, PyMarketBase)> {
+        let config = Config {
+            cumulative_runner_tv,
+            stable_runner_index,
+        };
+
+        let mut deser = DeserializerWithData::build(bytes.to_owned())
+            .map_err(|err| PyErr::new::<exceptions::PyRuntimeError, _>(err.to_string()))?;
+        let mut base = PyMarketBase::new(file);
+
+        match Self::drive_deserialize(&mut deser, &mut base, config, py) {
+            Ok(()) => {
+                let market = PyMarket {
+                    deser: Some(deser),
+                    config,
+                };
+                Ok((market, base))
+            }
+            Err(err) => Err(PyErr::new::<exceptions::PyRuntimeError, _>(err.to_string())),
+        }
+    }
+
     fn update(mut self_: PyRefMut<Self>, py: Python) -> PyResult<bool> {
         let config = self_.config;
         let mut deser = self_.deser.take().expect("Market without deser");
@@ -273,7 +305,7 @@ impl PyMarket {
     }
 }
 
-struct PyMarketToken<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+struct PyMarketToken<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
     type Value = ();
 
@@ -290,7 +322,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
             Mc,
         }
 
-        struct PyMarketOuterVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+        struct PyMarketOuterVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketOuterVisitor<'a, 'py> {
             type Value = ();
 
@@ -329,7 +361,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
 }
 
 // Used for serializing in place over the marketChange `mc` array
-struct PyMarketMcSeq<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+struct PyMarketMcSeq<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
     type Value = ();
 
@@ -337,7 +369,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct PyMarketMcSeqVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+        struct PyMarketMcSeqVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketMcSeqVisitor<'a, 'py> {
             type Value = ();
 
@@ -362,7 +394,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
 }
 
 // Used for serializing in place over the marketChange `mc` objects
-struct PyMarketMc<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+struct PyMarketMc<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
     type Value = ();
 
@@ -385,7 +417,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
             StreamId,
         }
 
-        struct PyMarketMcVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+        struct PyMarketMcVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketMcVisitor<'a, 'py> {
             type Value = ();
 
@@ -465,7 +497,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
 }
 
 // Used for serializing in place over the mc marketDefinition object
-struct PyMarketDefinition<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+struct PyMarketDefinition<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
     type Value = ();
 
@@ -515,7 +547,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
             Version,
         }
 
-        struct PyMarketDefinitionVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, SourceConfig);
+        struct PyMarketDefinitionVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketDefinitionVisitor<'a, 'py> {
             type Value = ();
 
@@ -731,7 +763,7 @@ mod tests {
         let mut m = PyMarketBase::new("".to_owned(), "".to_owned());
         let py = unsafe { Python::assume_gil_acquired() };
 
-        let config = SourceConfig{cumulative_runner_tv: true, stable_runner_index: false};
+        let config = Config{cumulative_runner_tv: true, stable_runner_index: false};
 
         let mut deser = serde_json::Deserializer::from_str(r#"{"id": "1.123456789"}{"id":"1.987654321"}"#);
 

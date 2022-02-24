@@ -1,92 +1,105 @@
 use crossbeam_channel::{bounded, Receiver};
 use ouroboros::self_referencing;
 use pyo3::exceptions;
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PySequence, PyString};
-use pyo3::PyIterProtocol;
-use rayon::prelude::*;
 use std::fs::File;
 use std::io::Error;
 use std::io::Read;
 use std::path::PathBuf;
-use std::thread;
 use tar::Archive;
 use tar::Entries;
 use bzip2_rs::decoder::ParallelDecoderReader;
 
+use crate::bflw::adapter::BflwAdapter;
 use crate::deser::DeserializerWithData;
 use crate::market_source::{MarketSource, SourceConfig, SourceItem};
 use crate::errors::IOErr;
+use crate::mutable::adapter::MutAdapter;
 
 #[pyclass]
 pub struct TarBz2 {
-    sources: TarBzSource,
-    config: SourceConfig,
-}
-
-impl MarketSource for TarBz2 {
-    fn config(&self) -> SourceConfig {
-        self.config
-    }
-    fn get(&mut self) -> Option<Result<SourceItem, IOErr>> {
-        self.sources.chan.recv().ok()
-    }
+    source: Option<TarBzSource>,
 }
 
 #[pymethods]
 impl TarBz2 {
     #[new]
-    #[args(cumulative_runner_tv = "true", stable_runner_index = "true")]
+    #[args(cumulative_runner_tv = "true")]
     fn __new__(
         paths: &PySequence,
         cumulative_runner_tv: bool,
-        stable_runner_index: bool,
     ) -> PyResult<Self> {
         let config = SourceConfig {
             cumulative_runner_tv,
-            stable_runner_index,
         };
 
-        let sources = (0..paths.len().unwrap_or(0))
+        let source = (0..paths.len().unwrap_or(0))
             .filter_map(|index| paths.get_item(index).ok())
             .filter_map(|any| any.downcast::<PyString>().map(|ps| ps.to_str()).ok())
             .filter_map(|s| s.ok())
             .map(PathBuf::from)
             .collect::<Vec<_>>();
 
-        let t = TarBzSource::new(sources).map_err(|op: std::io::Error| {
+        let t = TarBzSource::new(source, config).map_err(|op: std::io::Error| {
             PyErr::new::<exceptions::PyRuntimeError, _>(op.to_string())
         })?;
 
-        Ok(Self { config, sources: t })
-    }
-}
-
-#[pyproto]
-impl<'p> PyIterProtocol for TarBz2 {
-    fn __iter__(slf: PyRef<'p, Self>) -> PyRef<'p, Self> {
-        slf
+        Ok(Self { source: Some(t) })
     }
 
-    fn __next__(slf: PyRefMut<'p, Self>) -> Option<PyObject> {
-        MarketSource::next(slf)
+    #[pyo3(name = "mutable")]
+    #[args(stable_runner_index = "true")]
+    fn mut_market_adapter(&mut self, stable_runner_index: bool) -> PyResult<MutAdapter> {
+        let source = self.source.take();
+        
+        match source {
+            Some(s) => Ok(MutAdapter::new(Box::new(s), stable_runner_index)),
+            None => Err(PyRuntimeError::new_err("empty source"))
+        }
+    }
+
+    #[pyo3(name = "bflw")]
+    fn bflw_adapter(&mut self) -> PyResult<BflwAdapter> {
+        let source = self.source.take();
+        
+        match source {
+            Some(s) => Ok(BflwAdapter::new(Box::new(s))),
+            None => Err(PyRuntimeError::new_err("empty source"))
+        }
     }
 }
 
 struct TarBzSource {
     chan: Receiver<Result<SourceItem, IOErr>>,
+    config: SourceConfig,
+}
+
+impl MarketSource for TarBzSource {
+    fn config(&self) -> SourceConfig {
+        self.config
+    }
+}
+
+impl Iterator for TarBzSource {
+    type Item = Result<SourceItem, IOErr>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chan.recv().ok()
+    }
 }
 
 impl TarBzSource {
-    fn new(paths: Vec<PathBuf>) -> Result<Self, Error> {
+    fn new(paths: Vec<PathBuf>, config: SourceConfig) -> Result<Self, Error> {
         let (data_send, data_recv) = bounded(paths.len() * 10);
 
-        thread::spawn(move || -> Result<(), Error> {
+        rayon::spawn(move || {
             let _ = paths
-                .into_par_iter()
+                .into_iter()
                 .map(|path| (File::open(&path), path))
                 .filter_map(|(file, path)| file.ok().map(|file| (file, path)))
-                .flat_map_iter(|(file, path)| TarEntriesIter::build(path, file))
+                .flat_map(|(file, path)| TarEntriesIter::build(path, file))
                 .map(|x| {
                     x.and_then(|(name, buf)| {
                         let mut out_buf = Vec::with_capacity(buf.len());
@@ -109,11 +122,9 @@ impl TarBzSource {
                     })
                 })
                 .try_for_each(|r: Result<SourceItem, IOErr>| data_send.send(r));
-
-            Ok(())
         });
 
-        Ok(Self { chan: data_recv })
+        Ok(Self { chan: data_recv, config })
     }
 }
 

@@ -276,6 +276,8 @@ mod tests {
             [[1.6, 1],[1.1, 6],[1.4, 3],[1.3, 4],[1.5, 2],[1.2, 5]]
             [[2.2, 2],[1.9, 2],[1.7, 2],[2.1, 2],[1.8, 2],[2.0, 2]]
             [[3.0, 3],[2.3, 3],[2.9, 3],[2.4, 3],[2.8, 3],[2.5, 3],[2.7, 3],[2.6, 3],[3.1, 3]]
+            [[4.0, 5]]
+
         "#;
         let mut deser = serde_json::Deserializer::from_str(raw);
 
@@ -394,6 +396,34 @@ mod tests {
             PriceSize::new(1.1, 6.0),
         ];
 
+        let ps10 = ImmutablePriceSizeLayLadder(&ps9)
+        .deserialize(&mut deser)
+        .expect("failed to deserialize");
+        let ans10 = vec![
+            PriceSize::new(4.0, 5.0),
+            PriceSize::new(3.1, 3.0),
+            PriceSize::new(3.0, 3.0),
+            PriceSize::new(2.9, 3.0),
+            PriceSize::new(2.8, 3.0),
+            PriceSize::new(2.7, 3.0),
+            PriceSize::new(2.6, 3.0),
+            PriceSize::new(2.5, 3.0),
+            PriceSize::new(2.4, 3.0),
+            PriceSize::new(2.3, 3.0),
+            PriceSize::new(2.2, 2.0),
+            PriceSize::new(2.1, 2.0),
+            PriceSize::new(2.0, 2.0),
+            PriceSize::new(1.9, 2.0),
+            PriceSize::new(1.8, 2.0),
+            PriceSize::new(1.7, 2.0),
+            PriceSize::new(1.6, 1.0),
+            PriceSize::new(1.5, 2.0),
+            PriceSize::new(1.4, 3.0),
+            PriceSize::new(1.3, 4.0),
+            PriceSize::new(1.2, 5.0),
+            PriceSize::new(1.1, 6.0),
+        ];
+
         assert_eq!(ps1, ans1);
         assert_eq!(ps2, ans2);
         assert_eq!(ps3, ans3);
@@ -403,5 +433,7 @@ mod tests {
         assert_eq!(ps7, ans7);
         assert_eq!(ps8, ans8);
         assert_eq!(ps9, ans9);
+        assert_eq!(ps10, ans10);
+
     }
 }

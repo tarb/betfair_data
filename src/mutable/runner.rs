@@ -7,9 +7,9 @@ use std::{borrow::Cow, fmt};
 
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
-use crate::market_source::SourceConfig;
-use crate::price_size::{F64OrStr, PriceSize};
+use crate::mutable::config::Config;
 use crate::mutable::price_size::{PriceSizeBackLadder, PriceSizeLayLadder};
+use crate::price_size::{F64OrStr, PriceSize};
 
 use crate::strings::StringSetExtNeq;
 
@@ -39,7 +39,6 @@ pub struct PyRunner {
     pub removal_date: Option<i64>,
     // removal_date: Option<Py<PyDateTime>>,
     pub removal_date_str: Option<StaticString<24>>,
-
 }
 
 impl PyRunner {
@@ -113,7 +112,7 @@ pub struct PyRunnerBookSP {
 pub struct PyRunnerDefSeq<'a, 'py>(
     pub &'a mut Vec<Py<PyRunner>>,
     pub Python<'py>,
-    pub SourceConfig,
+    pub Config,
 );
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
     type Value = ();
@@ -122,7 +121,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(&'a mut Vec<Py<PyRunner>>, Python<'py>, SourceConfig);
+        struct RunnerSeqVisitor<'a, 'py>(&'a mut Vec<Py<PyRunner>>, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = ();
 
@@ -197,7 +196,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
     }
 }
 
-struct PyRunnerDefinitonDeser<'a, 'py>(&'a mut PyRunner, Python<'py>, SourceConfig);
+struct PyRunnerDefinitonDeser<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
     type Value = ();
 
@@ -218,7 +217,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
             Hc,
         }
 
-        struct RunnerDefVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, SourceConfig);
+        struct RunnerDefVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for RunnerDefVisitor<'a, 'py> {
             type Value = ();
 
@@ -284,7 +283,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
 pub struct PyRunnerChangeSeq<'a, 'py>(
     pub &'a mut Vec<Py<PyRunner>>,
     pub Python<'py>,
-    pub SourceConfig,
+    pub Config,
 );
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
     type Value = ();
@@ -293,7 +292,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(&'a mut Vec<Py<PyRunner>>, Python<'py>, SourceConfig);
+        struct RunnerSeqVisitor<'a, 'py>(&'a mut Vec<Py<PyRunner>>, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = ();
 
@@ -355,7 +354,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
     }
 }
 
-struct PyRunnerChangeDeser<'a, 'py>(&'a mut PyRunner, Python<'py>, SourceConfig);
+struct PyRunnerChangeDeser<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
     type Value = ();
 
@@ -379,7 +378,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
             Hc,
         }
 
-        struct RunnerChangeVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, SourceConfig);
+        struct RunnerChangeVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
         impl<'de, 'a, 'py> Visitor<'de> for RunnerChangeVisitor<'a, 'py> {
             type Value = ();
 

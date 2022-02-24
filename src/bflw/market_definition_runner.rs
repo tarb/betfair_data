@@ -5,7 +5,7 @@ use serde::{
     Deserialize, Deserializer,
 };
 
-use super::{datetime::DateTimeString, runner_book::RunnerBook};
+use super::{datetime::DateTimeString, float_str::FloatStr, runner_book::RunnerBook};
 use crate::{
     enums::SelectionStatus,
     ids::SelectionID,
@@ -55,7 +55,7 @@ pub struct MarketDefinitionRunner {
     #[pyo3(get)]
     adjustment_factor: Option<f64>,
     #[pyo3(get)]
-    id: SelectionID,
+    selection_id: SelectionID,
     #[pyo3(get)]
     removal_date: Option<SyncObj<DateTimeString>>,
     #[pyo3(get)]
@@ -65,9 +65,9 @@ pub struct MarketDefinitionRunner {
     #[pyo3(get)]
     name: Option<SyncObj<String>>,
     #[pyo3(get)]
-    handicap: f64,
+    handicap: FloatStr,
     #[pyo3(get)]
-    bsp: Option<f64>,
+    bsp: Option<FloatStr>,
 }
 
 #[derive(Deserialize)]
@@ -78,18 +78,18 @@ pub struct MarketDefRunnerUpdate<'a> {
     pub status: SelectionStatus,
     pub sort_priority: u16,
     pub name: Option<&'a str>,
-    pub bsp: Option<f64>,
+    pub bsp: Option<FloatStr>,
     pub removal_date: Option<&'a str>,
-    pub hc: Option<f64>,
+    pub hc: Option<FloatStr>,
 }
 
 impl MarketDefinitionRunner {
     fn new(change: &MarketDefRunnerUpdate) -> Self {
         Self {
-            id: change.id,
+            selection_id: change.id,
             status: change.status,
             adjustment_factor: change.adjustment_factor,
-            handicap: change.hc.unwrap_or(0.0),
+            handicap: change.hc.unwrap_or(FloatStr(0.0)),
             bsp: change.bsp,
             sort_priority: change.sort_priority,
             name: change.name.map(|s| SyncObj::new(String::from(s))),
@@ -117,7 +117,7 @@ impl MarketDefinitionRunner {
 
     fn update_from_change(&self, change: &MarketDefRunnerUpdate) -> Self {
         Self {
-            id: self.id,
+            selection_id: self.selection_id,
             status: change.status,
             adjustment_factor: change.adjustment_factor.or(self.adjustment_factor),
             handicap: change.hc.unwrap_or(self.handicap),
@@ -204,7 +204,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             self.0.and_then(|rs| {
                                 rs.iter()
                                     .map(|r| r.borrow_mut(self.2))
-                                    .position(|r| r.id == change.id)
+                                    .position(|r| r.selection_id == change.id)
                             }),
                             self.1.and_then(|rs| {
                                 rs.iter()
@@ -214,6 +214,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                         )
                     };
 
+                    // NOTE HERE
+                    // bflw doesnt reuse the previous ordering of past MarketDefinitionRunners, and the resulting order
+                    // should be that of the new runnerdefs
+
                     // marketRunnerDef
                     match (self.0, index.0) {
                         (Some(from), Some(index)) => {
@@ -222,27 +226,43 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             if runner.would_change(&change) {
                                 match defs.as_mut() {
                                     Some(defs) => {
-                                        defs[index] =
+                                        defs.push(
                                             Py::new(self.2, runner.update_from_change(&change))
-                                                .unwrap()
+                                                .unwrap(),
+                                        );
+                                        // defs[index] =
+                                        //     Py::new(self.2, runner.update_from_change(&change))
+                                        //         .unwrap()
                                     }
                                     None => {
-                                        defs = Some(
-                                            from.iter()
-                                                .enumerate()
-                                                .map(|(i, pr)| {
-                                                    if index == i {
-                                                        Py::new(
-                                                            self.2,
-                                                            runner.update_from_change(&change),
-                                                        )
-                                                        .unwrap()
-                                                    } else {
-                                                        pr.clone_ref(self.2)
-                                                    }
-                                                })
-                                                .collect(),
-                                        );
+                                        defs = {
+                                            let mut defs = Vec::with_capacity(std::cmp::min(
+                                                from.len() + 1,
+                                                10,
+                                            ));
+                                            defs.push(
+                                                Py::new(self.2, runner.update_from_change(&change))
+                                                    .unwrap(),
+                                            );
+                                            Some(defs)
+                                        };
+
+                                        // defs = Some(
+                                        //     from.iter()
+                                        //         .enumerate()
+                                        //         .map(|(i, pr)| {
+                                        //             if index == i {
+                                        //                 Py::new(
+                                        //                     self.2,
+                                        //                     runner.update_from_change(&change),
+                                        //                 )
+                                        //                 .unwrap()
+                                        //             } else {
+                                        //                 pr.clone_ref(self.2)
+                                        //             }
+                                        //         })
+                                        //         .collect(),
+                                        // );
                                     }
                                 };
                             }
@@ -256,7 +276,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                 None => {
                                     let mut d =
                                         Vec::with_capacity(std::cmp::max(from.len() + 1, 10));
-                                    from.clone_into(&mut d);
+                                    // from.clone_into(&mut d);
 
                                     d.push(runner);
                                     defs = Some(d);

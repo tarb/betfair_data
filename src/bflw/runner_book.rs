@@ -7,34 +7,46 @@ use serde_json::value::RawValue;
 
 use super::datetime::DateTimeString;
 use super::market_definition_runner::MarketDefRunnerUpdate;
+use super::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
+use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
+use crate::bflw::float_str::FloatStr;
+use crate::bflw::RoundToCents;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::container::{PyRep, SyncObj};
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
-use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
-use crate::immutable::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
 use crate::market_source::SourceConfig;
 use crate::price_size::{F64OrStr, PriceSize};
 
 #[pyclass]
 pub struct RunnerBook {
+    #[pyo3(get)]
     pub selection_id: SelectionID,
+    #[pyo3(get)]
     pub status: SelectionStatus,
+    #[pyo3(get)]
     pub total_matched: f64,
+    #[pyo3(get)]
     pub adjustment_factor: Option<f64>,
-    pub handicap: Option<f64>,
-    pub last_price_traded: Option<f64>,
+    #[pyo3(get)]
+    pub handicap: FloatStr, // I like this better as Option<f64> buut compat
+    #[pyo3(get)]
+    pub last_price_traded: Option<FloatStr>,
+    #[pyo3(get)]
     pub removal_date: Option<SyncObj<DateTimeString>>,
+    #[pyo3(get)]
     pub ex: Py<RunnerBookEX>,
+    #[pyo3(get)]
     pub sp: Py<RunnerBookSP>,
-
-    pub matches: Option<()>,
-    pub orders: Option<()>,
+    #[pyo3(get)]
+    pub matches: Vec<()>,
+    #[pyo3(get)]
+    pub orders: Vec<()>,
 }
 
 pub struct RunnerChangeUpdate {
-    handicap: Option<f64>,
-    last_price_traded: Option<f64>,
+    handicap: Option<FloatStr>,
+    last_price_traded: Option<FloatStr>,
     total_matched: Option<f64>,
     ex: Option<Py<RunnerBookEX>>,
     sp: Option<Py<RunnerBookSP>>,
@@ -69,21 +81,21 @@ impl RunnerBook {
             adjustment_factor: self.adjustment_factor,
             status: self.status,
             removal_date: self.removal_date.clone(),
-            handicap: change.handicap.or(self.handicap),
+            handicap: change.handicap.unwrap_or(self.handicap),
             last_price_traded: change.last_price_traded.or(self.last_price_traded),
             total_matched: change.total_matched.unwrap_or(self.total_matched),
             ex: change.ex.unwrap_or_else(|| self.ex.clone_ref(py)),
             sp: change.sp.unwrap_or_else(|| self.sp.clone_ref(py)),
 
-            matches: self.matches, // always empty
-            orders: self.orders,   // always empty
+            matches: self.matches.clone(), // always empty
+            orders: self.orders.clone(),   // always empty
         }
     }
 
     pub fn would_change(&self, change: &MarketDefRunnerUpdate, py: Python) -> bool {
         self.status != change.status
             || self.adjustment_factor != change.adjustment_factor
-            || self.handicap != change.hc
+            || !change.hc.is_some_with(|h| *h == self.handicap)
             || (change.bsp.is_some() && self.sp.borrow(py).actual_sp != change.bsp)
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
@@ -112,7 +124,7 @@ impl RunnerBook {
             selection_id: self.selection_id,
             status: change.status,
             adjustment_factor: change.adjustment_factor.or(self.adjustment_factor),
-            handicap: change.hc.or(self.handicap),
+            handicap: change.hc.unwrap_or(self.handicap),
             last_price_traded: self.last_price_traded,
             total_matched: self.total_matched,
             ex: self.ex.clone_ref(py),
@@ -124,12 +136,16 @@ impl RunnerBook {
                         let dts = DateTimeString::new(s).unwrap(); // TODO: fix unwrap, maybe runner def update should take the dt already passed
                         Some(SyncObj::new(dts))
                     }
+                    None => {
+                        let dts = DateTimeString::new(s).unwrap();
+                        Some(SyncObj::new(dts))
+                    }
                     _ => self.removal_date.clone(),
                 })
                 .or_else(|| self.removal_date.clone()),
 
-            matches: self.matches, // always empty
-            orders: self.orders,   // always empty
+            matches: self.matches.clone(), // always empty
+            orders: self.orders.clone(),   // always empty
         }
     }
 }
@@ -146,7 +162,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(Option<&'a Vec<Py<RunnerBook>>>, Python<'py>, SourceConfig);
+        struct RunnerSeqVisitor<'a, 'py>(
+            Option<&'a Vec<Py<RunnerBook>>>,
+            Python<'py>,
+            SourceConfig,
+        );
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = Vec<Py<RunnerBook>>;
 
@@ -161,11 +181,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
                 // TODO - maybe move to lazy cloning this vec if we detect that the output would actually change
                 let mut v = self
                     .0
-                    .map(|v| 
-                        v.iter()
-                        .map(|r| r.clone_ref(self.1))
-                        .collect::<Vec<_>>()
-                    )
+                    .map(|v| v.iter().map(|r| r.clone_ref(self.1)).collect::<Vec<_>>())
                     .unwrap_or_else(|| Vec::with_capacity(10));
 
                 #[derive(Deserialize)]
@@ -255,12 +271,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
 
                 let mut spb: Option<Vec<PriceSize>> = None;
                 let mut spl: Option<Vec<PriceSize>> = None;
-                let mut spn: Option<f64> = None;
-                let mut spf: Option<f64> = None;
+                let mut spn: Option<FloatStr> = None;
+                let mut spf: Option<FloatStr> = None;
 
                 let mut tv: Option<f64> = None;
-                let mut ltp: Option<f64> = None;
-                let mut hc: Option<f64> = None;
+                let mut ltp: Option<FloatStr> = None;
+                let mut hc: Option<FloatStr> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -270,9 +286,20 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         }
                         Field::Atb => {
                             let ex = self.0.ex.borrow(self.1);
-                            atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
-                                &ex.available_to_back.value,
-                            ))?);
+
+                            if self.0.selection_id == 21534802 {
+    
+                                let raw = map.next_value::<&RawValue>()?;
+                                // println!("{}", raw.get());
+    
+                                let mut deser = serde_json::Deserializer::from_str(raw.get());
+                                atb = Some(ImmutablePriceSizeLayLadder(&ex.available_to_back.value).deserialize(&mut deser).unwrap());
+
+                            } else {
+                                atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
+                                    &ex.available_to_back.value,
+                                ))?);
+                            }
                         }
                         Field::Atl => {
                             let ex = self.0.ex.borrow(self.1);
@@ -287,34 +314,34 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                             ))?;
 
                             if self.2.cumulative_runner_tv {
-                                tv = Some(l.iter().map(|ps| ps.size).sum());
+                                tv = Some(l.iter().map(|ps| ps.size).sum::<f64>().round_cent());
                             }
 
                             trd = Some(l);
                         }
                         Field::Spb => {
                             let sp = self.0.sp.borrow(self.1);
-                            spb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
+                            spl = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
                                 &sp.lay_liability_taken.value,
                             ))?);
                         }
                         Field::Spl => {
                             let sp = self.0.sp.borrow(self.1);
-                            spl = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(
+                            spb = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(
                                 &sp.back_stake_taken.value,
                             ))?);
                         }
                         Field::Spn => {
-                            spn = Some(map.next_value::<F64OrStr>()?.into());
+                            spn = Some(map.next_value::<FloatStr>()?);
                         }
                         Field::Spf => {
-                            spf = Some(map.next_value::<F64OrStr>()?.into());
+                            spf = Some(map.next_value::<FloatStr>()?);
                         }
                         Field::Ltp => {
-                            ltp = Some(map.next_value::<F64OrStr>()?.into());
+                            ltp = Some(map.next_value::<FloatStr>()?);
                         }
                         Field::Hc => {
-                            hc = Some(map.next_value::<F64OrStr>()?.into());
+                            hc = Some(map.next_value::<FloatStr>()?);
                         }
                         // The betfair historic data files differ from the stream here, they send tv deltas
                         // that need to be accumulated, whereas the stream sends the value itself.
@@ -322,7 +349,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                             if self.2.cumulative_runner_tv {
                                 map.next_value::<IgnoredAny>()?;
                             } else {
-                                tv = Some(map.next_value::<F64OrStr>()?.into());
+                                let v: f64 = map.next_value::<F64OrStr>()?.into();
+                                let v = v.round_cent();
+                                tv = Some(v);
                             }
                         }
                     };

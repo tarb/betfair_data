@@ -53,14 +53,12 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<Files>()?;
     m.add_class::<TarBz2>()?;
     m.add_class::<PriceSize>()?;
+    m.add_class::<PyMarket>()?;
+    m.add_class::<PyMarketBase>()?;
+    m.add_class::<PyRunner>()?;
+    m.add_class::<PyRunnerBookEX>()?;
+    m.add_class::<PyRunnerBookSP>()?;
 
-    let mutable = PyModule::new(py, "mut")?;
-    mutable.add_class::<PyMarket>()?;
-    mutable.add_class::<PyMarketBase>()?;
-    mutable.add_class::<PyRunner>()?;
-    mutable.add_class::<PyRunnerBookEX>()?;
-    mutable.add_class::<PyRunnerBookSP>()?;
-    m.add_submodule(mutable)?;
 
     let bflw = PyModule::new(py, "bflw")?;
     bflw.add_class::<BflwIter>()?;

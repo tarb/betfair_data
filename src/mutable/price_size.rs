@@ -135,7 +135,6 @@ impl<'de, 'a> DeserializeSeed<'de> for PriceSizeLayLadder<'a> {
 mod tests {
     use super::*;
 
-
     #[test]
     fn test_pricesize_deserialize() {
         let raw = r#"["Infinity", 5]"#;

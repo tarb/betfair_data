@@ -32,10 +32,6 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub discount_allowed: bool,
     #[pyo3(get)]
-    pub event_id: EventID,
-    #[pyo3(get)]
-    pub event_type_id: EventTypeID,
-    #[pyo3(get)]
     pub in_play: bool,
     #[pyo3(get)]
     pub market_base_rate: f32,
@@ -52,7 +48,7 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub persistence_enabled: bool,
     #[pyo3(get)]
-    pub regulators: SyncObj<String>,
+    pub regulators: SyncObj<Vec<String>>,
     #[pyo3(get)]
     pub runners: SyncObj<Vec<Py<MarketDefinitionRunner>>>,
     #[pyo3(get)]
@@ -77,12 +73,29 @@ pub struct MarketDefinition {
     pub name: Option<SyncObj<String>>,
     #[pyo3(get)]
     pub event_name: Option<SyncObj<String>>,
+
+    // use getters to turn these into strings
+    pub event_id: EventID,
+    pub event_type_id: EventTypeID,
     // lineMaxUnit: float = None,
     // lineMinUnit: float = None,
     // lineInterval: float = None,
     // priceLadderDefinition: dict = None,
     // keyLineDefinition: dict = None,
     // raceType: str = None,
+}
+
+#[pymethods]
+impl MarketDefinition {
+    #[getter(event_id)]
+    fn get_event_id(&self, py: Python) -> PyObject {
+        self.event_id.to_string().into_py(py)
+    }
+
+    #[getter(event_type_id)]
+    fn get_event_type_id(&self, py: Python) -> PyObject {
+        self.event_type_id.to_string().into_py(py)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -104,7 +117,7 @@ struct MarketDefinitionUpdate<'a> {
     number_of_winners: Option<u8>,
     open_date: Option<&'a str>,
     persistence_enabled: Option<bool>,
-    regulators: Option<&'a str>,
+    regulators: Option<Vec<&'a str>>,
     runners: Option<Vec<Py<MarketDefinitionRunner>>>,
     runners_voidable: Option<bool>,
     settled_time: Option<&'a str>,
@@ -126,7 +139,7 @@ impl MarketDefinition {
             betting_type: change.betting_type.unwrap_or_default(),
             regulators: change
                 .regulators
-                .map(|s| SyncObj::new(String::from(s)))
+                .map(|v| SyncObj::new(v.iter().map(|s| s.to_string()).collect()))
                 .unwrap_or_default(),
             bsp_reconciled: change.bsp_reconciled.unwrap_or_default(),
             bsp_market: change.bsp_market.unwrap_or_default(),
@@ -209,7 +222,7 @@ impl MarketDefinition {
                 .unwrap_or_else(|| self.market_type.clone()),
             regulators: change
                 .regulators
-                .map(|s| SyncObj::new(String::from(s)))
+                .map(|v| SyncObj::new(v.iter().map(|s| s.to_string()).collect()))
                 .unwrap_or_else(|| self.regulators.clone()),
             timezone: change
                 .timezone
@@ -562,6 +575,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 
                             let (d, b) =
                                 map.next_value_seed(RunnerDefSeq(s1, s2, self.2, self.3))?;
+                                
                             changed = d.is_some();
                             upt.runners = d;
                             books = b;
@@ -630,12 +644,21 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             }
                         }
 
+                        Field::Regulators => {
+                            let v = map.next_value::<Vec<&str>>()?;
+
+                            if self.0.is_some_with(|def| {
+                                (def.regulators.value.is_empty() && !v.is_empty())
+                                    || !def.regulators.value.iter().eq(v.iter())
+                            }) || self.0.is_none()
+                            {
+                                upt.regulators = Some(v);
+                                changed = true;
+                            }
+                        }
                         Field::EachWayDivisor => {
                             map.next_value::<serde::de::IgnoredAny>()?;
                             // let each_way_divisor = Some(map.next_value::<f64>()?);
-                        }
-                        Field::Regulators => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
                         }
                         // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::RaceType => {

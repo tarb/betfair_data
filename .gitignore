@@ -1,7 +1,6 @@
 /target
 /data
 /dist
-/py_src
 /.venv/lib/*
 
 *.tar

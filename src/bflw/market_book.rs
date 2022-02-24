@@ -9,6 +9,7 @@ use super::market_definition::MarketDefinition;
 use super::runner_book::RunnerBook;
 use crate::bflw::market_definition::MarketDefinitionDeser;
 use crate::bflw::runner_book::RunnerChangeSeq;
+use crate::bflw::RoundToCents;
 use crate::enums::MarketStatus;
 use crate::ids::MarketID;
 use crate::immutable::container::SyncObj;
@@ -94,7 +95,7 @@ pub struct MarketBook {
     #[pyo3(get)]
     pub inplay: bool,
     #[pyo3(get)]
-    pub is_market_data_delayed: bool,
+    pub is_market_data_delayed: Option<bool>,
     #[pyo3(get)]
     pub number_of_active_runners: u16,
     #[pyo3(get)]
@@ -106,7 +107,7 @@ pub struct MarketBook {
     #[pyo3(get)]
     pub status: MarketStatus,
     #[pyo3(get)]
-    pub total_available: f64,
+    pub total_available: Option<()>, // f64 but bflw doesnt seem to use this on historic files
     #[pyo3(get)]
     pub total_matched: f64,
     #[pyo3(get)]
@@ -129,39 +130,35 @@ struct MarketBookUpdate<'a> {
     total_volume: Option<f64>,
 }
 
-// #[pymethods]
-// impl MarketBook {
-//     #[getter(last_match_time)]
-//     fn get_last_match_time(&self, py: Python) -> PyObject {
-//         self.last_match_time.to_object(py)
-//     }
-
-//     #[getter(runners)]
-//     fn get_runners(&self, py: Python) -> PyObject {
-//         self.runners.to_object(py)
-//     }
-// }
+#[pymethods]
+impl MarketBook {
+    #[getter(publish_time_epoch)]
+    fn get_publish_time_epoch(&self, py: Python) -> PyObject {
+        let ts = *self.publish_time;
+        ts.into_py(py)
+    }
+}
 
 impl MarketBook {
     fn new(change: MarketBookUpdate, py: Python) -> Self {
         let def = change.definition.unwrap(); // fix unwrap
 
         // maybe theres a better way to calculate this
-        let available = change
-            .runners
-            .as_ref()
-            .map(|rs| {
-                rs.iter()
-                    .map(|r| {
-                        let r = r.borrow(py);
-                        let ex = r.ex.borrow(py);
-                        let back: f64 = ex.available_to_back.value.iter().map(|ps| ps.size).sum();
-                        let lay: f64 = ex.available_to_lay.value.iter().map(|ps| ps.size).sum();
-                        back + lay
-                    })
-                    .sum::<f64>()
-            })
-            .unwrap_or_default();
+        // let available = change
+        //     .runners
+        //     .as_ref()
+        //     .map(|rs| {
+        //         rs.iter()
+        //             .map(|r| {
+        //                 let r = r.borrow(py);
+        //                 let ex = r.ex.borrow(py);
+        //                 let back: f64 = ex.available_to_back.value.iter().map(|ps| ps.size).sum();
+        //                 let lay: f64 = ex.available_to_lay.value.iter().map(|ps| ps.size).sum();
+        //                 back + lay
+        //             })
+        //             .sum::<f64>()
+        //     })
+        //     .unwrap_or_default();
 
         Self {
             market_id: SyncObj::new(MarketID::from(change.market_id)),
@@ -172,14 +169,14 @@ impl MarketBook {
             complete: def.complete,
             cross_matching: def.cross_matching,
             inplay: def.in_play,
-            is_market_data_delayed: false, // TODO ?
+            is_market_data_delayed: None,
             number_of_active_runners: def.number_of_active_runners,
             number_of_runners: def.runners.value.len() as u16,
             runners_voidable: def.runners_voidable,
             status: def.status,
             number_of_winners: def.number_of_winners,
             version: def.version,
-            total_available: available,
+            total_available: None, // available,
             market_definition: Py::new(py, def).unwrap(),
 
             publish_time: DateTime::new(0),
@@ -188,17 +185,17 @@ impl MarketBook {
     }
 
     fn update_from_change(&self, change: MarketBookUpdate, py: Python) -> Self {
-        let available = change.runners.as_ref().map(|rs| {
-            rs.iter()
-                .map(|r| {
-                    let r = r.borrow(py);
-                    let ex = r.ex.borrow(py);
-                    let back: f64 = ex.available_to_back.value.iter().map(|ps| ps.size).sum();
-                    let lay: f64 = ex.available_to_lay.value.iter().map(|ps| ps.size).sum();
-                    back + lay
-                })
-                .sum::<f64>()
-        });
+        // let available = change.runners.as_ref().map(|rs| {
+        //     rs.iter()
+        //         .map(|r| {
+        //             let r = r.borrow(py);
+        //             let ex = r.ex.borrow(py);
+        //             let back: f64 = ex.available_to_back.value.iter().map(|ps| ps.size).sum();
+        //             let lay: f64 = ex.available_to_lay.value.iter().map(|ps| ps.size).sum();
+        //             back + lay
+        //         })
+        //         .sum::<f64>()
+        // });
 
         Self {
             market_id: self.market_id.clone(),
@@ -232,7 +229,7 @@ impl MarketBook {
                 .as_ref()
                 .map(|def| def.in_play)
                 .unwrap_or(self.inplay),
-            is_market_data_delayed: false, // TODO ?
+            is_market_data_delayed: None,
             number_of_active_runners: change
                 .definition
                 .as_ref()
@@ -263,7 +260,7 @@ impl MarketBook {
                 .as_ref()
                 .map(|def| def.version)
                 .unwrap_or(self.version),
-            total_available: available.unwrap_or(self.total_available),
+            total_available: None, // available.unwrap_or(self.total_available),
             market_definition: change
                 .definition
                 .map(|def| Py::new(py, def).unwrap())
@@ -367,6 +364,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                 #[derive(Deserialize)]
                 struct MarketWithID<'a> {
                     id: &'a str,
+                    img: Option<bool>,
                 }
 
                 let mut next_books: Vec<Py<MarketBook>> = Vec::new();
@@ -377,15 +375,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
                     let mb = {
-                        next_books
-                            .iter()
-                            .find(|m| (*m).borrow(self.1).market_id.value.as_str() == mid.id)
-                            .or_else(|| {
-                                self.0.iter().find(|m| {
-                                    (*m).borrow(self.1).market_id.value.as_str() == mid.id
+                        if mid.img.contains(&true) {
+                            None
+                        } else {
+                            next_books
+                                .iter()
+                                .find(|m| (*m).borrow(self.1).market_id.value.as_str() == mid.id)
+                                .or_else(|| {
+                                    self.0.iter().find(|m| {
+                                        (*m).borrow(self.1).market_id.value.as_str() == mid.id
+                                    })
                                 })
-                            })
-                            .map(|o| o.borrow(self.1))
+                                .map(|o| o.borrow(self.1))
+                        }
                     };
 
                     let next_mb = MarketMc(mb, self.1, self.2)
@@ -454,7 +456,7 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                                 .runners
                                 .as_ref()
                                 .or_else(|| self.0.as_ref().map(|mb| mb.runners.value.as_ref()));
-                            
+
                             let (d, r) = map.next_value_seed(MarketDefinitionDeser(
                                 def, runners, self.1, self.2,
                             ))?;
@@ -470,10 +472,23 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                             upt.runners = Some(
                                 map.next_value_seed(RunnerChangeSeq(runners, self.1, self.2))?,
                             );
+
+                            // if cumulative_runner_tv is on, then tv shouldnt be sent at a market level and will have
+                            // to be derived from the sum of runner tv's. This happens when using the data provided
+                            // from betfair historical data service, not saved from the actual stream
+                            if self.2.cumulative_runner_tv {
+                                upt.total_volume = upt
+                                    .runners
+                                    .as_ref()
+                                    .map(|rs| {
+                                        rs.iter().map(|r| r.borrow(self.1).total_matched).sum()
+                                    })
+                                    .map(|f: f64| f.round_cent());
+                            }
                         }
                         Field::Tv => {
                             if !self.2.cumulative_runner_tv {
-                                upt.total_volume = Some(map.next_value::<f64>()?);
+                                upt.total_volume = Some(map.next_value::<f64>()?.round_cent());
                             } else {
                                 map.next_value::<IgnoredAny>()?;
                             }
@@ -490,21 +505,13 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                     }
                 }
 
-                // if cumulative_runner_tv is on, then tv shouldnt be sent at a market level and will have
-                // to be derived from the sum of runner tv's. This happens when using the data provided
-                // from betfair historical data service, not saved from the actual stream
-                if self.2.cumulative_runner_tv {
-                    upt.total_volume = upt
-                        .runners
-                        .as_ref()
-                        .map(|rs| rs.iter().map(|r| r.borrow(self.1).total_matched).sum());
-                }
-
                 let mb = match (self.0, &upt.definition) {
                     (Some(mb), Some(_)) => mb.update_from_change(upt, self.1),
                     (Some(mb), None) => mb.update_from_change(upt, self.1),
                     (None, Some(_)) => MarketBook::new(upt, self.1),
-                    (None, None) => return Err(Error::custom("missing definition on initial market update")),
+                    (None, None) => {
+                        return Err(Error::custom("missing definition on initial market update"))
+                    }
                 };
 
                 Ok(mb)
