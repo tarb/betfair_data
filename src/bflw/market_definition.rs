@@ -77,6 +77,7 @@ pub struct MarketDefinition {
     // use getters to turn these into strings
     pub event_id: EventID,
     pub event_type_id: EventTypeID,
+    
     // lineMaxUnit: float = None,
     // lineMinUnit: float = None,
     // lineInterval: float = None,
@@ -575,7 +576,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 
                             let (d, b) =
                                 map.next_value_seed(RunnerDefSeq(s1, s2, self.2, self.3))?;
-                                
+
                             changed = d.is_some();
                             upt.runners = d;
                             books = b;
@@ -656,11 +657,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 changed = true;
                             }
                         }
+                        // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::EachWayDivisor => {
                             map.next_value::<serde::de::IgnoredAny>()?;
                             // let each_way_divisor = Some(map.next_value::<f64>()?);
                         }
-                        // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::RaceType => {
                             map.next_value::<serde::de::IgnoredAny>()?;
                             // panic!("{} {}", self.0.source, self.0.file);

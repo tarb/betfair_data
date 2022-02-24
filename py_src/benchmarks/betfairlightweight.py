@@ -8,7 +8,7 @@ import betfairlightweight
 
 trading = betfairlightweight.APIClient("username", "password", "appkey")
 listener = betfairlightweight.StreamListener(
-    max_latency=None, lightweight=True, update_clk=False, output_queue=None, cumulative_runner_tv=True, calculate_market_tv=True
+    max_latency=None, lightweight=False, update_clk=False, output_queue=None, cumulative_runner_tv=True, calculate_market_tv=True
 )
 
 paths = [ 

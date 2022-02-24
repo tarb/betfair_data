@@ -286,20 +286,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         }
                         Field::Atb => {
                             let ex = self.0.ex.borrow(self.1);
-
-                            if self.0.selection_id == 21534802 {
-    
-                                let raw = map.next_value::<&RawValue>()?;
-                                // println!("{}", raw.get());
-    
-                                let mut deser = serde_json::Deserializer::from_str(raw.get());
-                                atb = Some(ImmutablePriceSizeLayLadder(&ex.available_to_back.value).deserialize(&mut deser).unwrap());
-
-                            } else {
-                                atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
-                                    &ex.available_to_back.value,
-                                ))?);
-                            }
+                            atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
+                                &ex.available_to_back.value,
+                            ))?);
                         }
                         Field::Atl => {
                             let ex = self.0.ex.borrow(self.1);

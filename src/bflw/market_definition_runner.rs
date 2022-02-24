@@ -14,35 +14,6 @@ use crate::{
 };
 
 /*
-class MarketDefinitionRunner:
-"""
-:type adjustment_factor: float
-:type id: int
-:type removal_date: datetime.datetime
-:type sort_priority: int
-:type status: unicode
-"""
-
-def __init__(
-    self,
-    id: int,
-    sortPriority: int,
-    status: str,
-    hc: float = 0,
-    bsp: float = None,
-    adjustmentFactor: float = None,
-    removalDate: str = None,
-    name: str = None,
-):
-    self.selection_id = id
-    self.sort_priority = sortPriority
-    self.status = status
-    self.handicap = hc
-    self.bsp = bsp
-    self.adjustment_factor = adjustmentFactor
-    self.removal_date = BaseResource.strip_datetime(removalDate)
-    self.name = name  # historic data only
-
 def __str__(self):
     return "MarketDefinitionRunner: %s" % self.selection_id
 
@@ -214,7 +185,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                         )
                     };
 
-                    // NOTE HERE
+                    // NOTE HERE (about commented out code)
                     // bflw doesnt reuse the previous ordering of past MarketDefinitionRunners, and the resulting order
                     // should be that of the new runnerdefs
 
