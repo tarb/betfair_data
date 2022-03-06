@@ -5,7 +5,6 @@ use serde::de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
-use super::datetime::DateTimeString;
 use super::market_definition_runner::MarketDefRunnerUpdate;
 use super::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
 use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
@@ -15,6 +14,7 @@ use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::container::{PyRep, SyncObj};
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
+use crate::immutable::datetime::DateTimeString;
 use crate::market_source::SourceConfig;
 use crate::price_size::{F64OrStr, PriceSize};
 
@@ -29,7 +29,7 @@ pub struct RunnerBook {
     #[pyo3(get)]
     pub adjustment_factor: Option<f64>,
     #[pyo3(get)]
-    pub handicap: FloatStr, // I like this better as Option<f64> buut compat
+    pub handicap: FloatStr, // I like this better as Option<f64> but bflw compat
     #[pyo3(get)]
     pub last_price_traded: Option<FloatStr>,
     #[pyo3(get)]
@@ -100,24 +100,31 @@ impl RunnerBook {
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
                     .removal_date
-                    .is_some_with(|s| !change.removal_date.contains(&s.value.as_str())))
+                    .is_some_with(|s| !change.removal_date.contains(&s.as_str())))
     }
 
     pub fn update_from_def(&self, change: &MarketDefRunnerUpdate, py: Python) -> Self {
-        // need to update sp obj with bsp value
-        let sp = if change.bsp.is_some() {
+        let (ex, sp) = if change.status == SelectionStatus::Removed
+            || change.status == SelectionStatus::RemovedVacant
+        {
+            (
+                Py::new(py, RunnerBookEX::default()).unwrap(),
+                self.sp.clone_ref(py),
+            )
+        } else if change.bsp.is_some() {
+            // need to update sp obj with bsp value
             let sp = self.sp.borrow(py);
             if sp.actual_sp != change.bsp {
                 let upt = RunnerBookSPUpdate {
                     actual_sp: change.bsp,
                     ..Default::default()
                 };
-                sp.update(upt, py)
+                (self.ex.clone_ref(py), sp.update(upt, py))
             } else {
-                self.sp.clone_ref(py)
+                (self.ex.clone_ref(py), self.sp.clone_ref(py))
             }
         } else {
-            self.sp.clone_ref(py)
+            (self.ex.clone_ref(py), self.sp.clone_ref(py))
         };
 
         Self {
@@ -127,12 +134,12 @@ impl RunnerBook {
             handicap: change.hc.unwrap_or(self.handicap),
             last_price_traded: self.last_price_traded,
             total_matched: self.total_matched,
-            ex: self.ex.clone_ref(py),
+            ex,
             sp,
             removal_date: change
                 .removal_date
                 .and_then(|s| match &self.removal_date {
-                    Some(rd) if rd.value.as_str() != s => {
+                    Some(rd) if rd.as_str() != s => {
                         let dts = DateTimeString::new(s).unwrap(); // TODO: fix unwrap, maybe runner def update should take the dt already passed
                         Some(SyncObj::new(dts))
                     }
@@ -150,11 +157,11 @@ impl RunnerBook {
     }
 }
 
-pub struct RunnerChangeSeq<'a, 'py>(
-    pub Option<&'a Vec<Py<RunnerBook>>>,
-    pub Python<'py>,
-    pub SourceConfig,
-);
+pub struct RunnerChangeSeq<'a, 'py> {
+    pub runners: Option<&'a Vec<Py<RunnerBook>>>,
+    pub py: Python<'py>,
+    pub config: SourceConfig,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
     type Value = Vec<Py<RunnerBook>>;
 
@@ -162,11 +169,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(
-            Option<&'a Vec<Py<RunnerBook>>>,
-            Python<'py>,
-            SourceConfig,
-        );
+        struct RunnerSeqVisitor<'a, 'py> {
+            runners: Option<&'a Vec<Py<RunnerBook>>>,
+            py: Python<'py>,
+            config: SourceConfig,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = Vec<Py<RunnerBook>>;
 
@@ -178,10 +185,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                // TODO - maybe move to lazy cloning this vec if we detect that the output would actually change
                 let mut v = self
-                    .0
-                    .map(|v| v.iter().map(|r| r.clone_ref(self.1)).collect::<Vec<_>>())
+                    .runners
+                    .map(|v| v.iter().map(|r| r.clone_ref(self.py)).collect::<Vec<_>>())
                     .unwrap_or_else(|| Vec::with_capacity(10));
 
                 #[derive(Deserialize)]
@@ -196,27 +202,35 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 
                     let index = v
                         .iter()
-                        .map(|r| r.borrow(self.1))
+                        .map(|r| r.borrow(self.py))
                         .position(|r| r.selection_id == rid.id);
 
                     match index {
                         Some(index) => {
                             let runner = {
-                                let runner = unsafe { v.get_unchecked(index).borrow(self.1) };
-                                RunnerBookChangeDeser(&runner, self.1, self.2)
-                                    .deserialize(&mut deser)
-                                    .map_err(Error::custom)?
+                                let runner = unsafe { v.get_unchecked(index).borrow(self.py) };
+                                RunnerBookChangeDeser {
+                                    runner: &runner,
+                                    py: self.py,
+                                    config: self.config,
+                                }
+                                .deserialize(&mut deser)
+                                .map_err(Error::custom)?
                             };
 
-                            v[index] = Py::new(self.1, runner).unwrap();
+                            v[index] = Py::new(self.py, runner).unwrap();
                         }
                         None => {
-                            let runner = RunnerBook::new(rid.id, self.1);
-                            let runner = RunnerBookChangeDeser(&runner, self.1, self.2)
-                                .deserialize(&mut deser)
-                                .map_err(Error::custom)?;
+                            let runner = RunnerBook::new(rid.id, self.py);
+                            let runner = RunnerBookChangeDeser {
+                                runner: &runner,
+                                py: self.py,
+                                config: self.config,
+                            }
+                            .deserialize(&mut deser)
+                            .map_err(Error::custom)?;
 
-                            v.push(Py::new(self.1, runner).unwrap());
+                            v.push(Py::new(self.py, runner).unwrap());
                         }
                     }
                 }
@@ -225,11 +239,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             }
         }
 
-        deserializer.deserialize_seq(RunnerSeqVisitor(self.0, self.1, self.2))
+        deserializer.deserialize_seq(RunnerSeqVisitor {
+            runners: self.runners,
+            py: self.py,
+            config: self.config,
+        })
     }
 }
 
-struct RunnerBookChangeDeser<'a, 'py>(&'a RunnerBook, Python<'py>, SourceConfig);
+struct RunnerBookChangeDeser<'a, 'py> {
+    runner: &'a RunnerBook,
+    py: Python<'py>,
+    config: SourceConfig,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
     type Value = RunnerBook;
 
@@ -253,7 +275,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
             Hc,
         }
 
-        struct RunnerChangeVisitor<'a, 'py>(&'a RunnerBook, Python<'py>, SourceConfig);
+        struct RunnerChangeVisitor<'a, 'py> {
+            runner: &'a RunnerBook,
+            py: Python<'py>,
+            config: SourceConfig,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerChangeVisitor<'a, 'py> {
             type Value = RunnerBook;
 
@@ -282,42 +308,42 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                     match key {
                         Field::Id => {
                             let id = map.next_value::<SelectionID>()?;
-                            debug_assert!(id == self.0.selection_id);
+                            debug_assert!(id == self.runner.selection_id);
                         }
                         Field::Atb => {
-                            let ex = self.0.ex.borrow(self.1);
+                            let ex = self.runner.ex.borrow(self.py);
                             atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
-                                &ex.available_to_back.value,
+                                &ex.available_to_back,
                             ))?);
                         }
                         Field::Atl => {
-                            let ex = self.0.ex.borrow(self.1);
+                            let ex = self.runner.ex.borrow(self.py);
                             atl = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(
-                                &ex.available_to_lay.value,
+                                &ex.available_to_lay,
                             ))?);
                         }
                         Field::Trd => {
-                            let ex = self.0.ex.borrow(self.1);
+                            let ex = self.runner.ex.borrow(self.py);
                             let l = map.next_value_seed(ImmutablePriceSizeBackLadder(
-                                &ex.traded_volume.value,
+                                &ex.traded_volume,
                             ))?;
 
-                            if self.2.cumulative_runner_tv {
+                            if self.config.cumulative_runner_tv {
                                 tv = Some(l.iter().map(|ps| ps.size).sum::<f64>().round_cent());
                             }
 
                             trd = Some(l);
                         }
                         Field::Spb => {
-                            let sp = self.0.sp.borrow(self.1);
+                            let sp = self.runner.sp.borrow(self.py);
                             spl = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
-                                &sp.lay_liability_taken.value,
+                                &sp.lay_liability_taken,
                             ))?);
                         }
                         Field::Spl => {
-                            let sp = self.0.sp.borrow(self.1);
+                            let sp = self.runner.sp.borrow(self.py);
                             spb = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(
-                                &sp.back_stake_taken.value,
+                                &sp.back_stake_taken,
                             ))?);
                         }
                         Field::Spn => {
@@ -335,7 +361,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         // The betfair historic data files differ from the stream here, they send tv deltas
                         // that need to be accumulated, whereas the stream sends the value itself.
                         Field::Tv => {
-                            if self.2.cumulative_runner_tv {
+                            if self.config.cumulative_runner_tv {
                                 map.next_value::<IgnoredAny>()?;
                             } else {
                                 let v: f64 = map.next_value::<F64OrStr>()?.into();
@@ -353,7 +379,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         traded_volume: trd,
                     };
 
-                    Some(self.0.ex.borrow(self.1).update(upt, self.1))
+                    Some(self.runner.ex.borrow(self.py).update(upt, self.py))
                 } else {
                     None
                 };
@@ -367,7 +393,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         lay_liability_taken: spl,
                     };
 
-                    Some(self.0.sp.borrow(self.1).update(upt, self.1))
+                    Some(self.runner.sp.borrow(self.py).update(upt, self.py))
                 } else {
                     None
                 };
@@ -380,7 +406,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                     sp,
                 };
 
-                Ok(self.0.update_from_change(update, self.1))
+                Ok(self.runner.update_from_change(update, self.py))
             }
         }
 
@@ -390,7 +416,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
         deserializer.deserialize_struct(
             "RunnerChange",
             FIELDS,
-            RunnerChangeVisitor(self.0, self.1, self.2),
+            RunnerChangeVisitor {
+                runner: self.runner,
+                py: self.py,
+                config: self.config,
+            },
         )
     }
 }

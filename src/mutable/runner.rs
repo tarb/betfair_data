@@ -2,7 +2,6 @@ use pyo3::prelude::*;
 use serde::de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
-use staticvec::StaticString;
 use std::{borrow::Cow, fmt};
 
 use crate::enums::SelectionStatus;
@@ -11,7 +10,7 @@ use crate::mutable::config::Config;
 use crate::mutable::price_size::{PriceSizeBackLadder, PriceSizeLayLadder};
 use crate::price_size::{F64OrStr, PriceSize};
 
-use crate::strings::StringSetExtNeq;
+use crate::strings::{FixedSizeString, StringSetExtNeq};
 
 #[pyclass(name = "Runner")]
 pub struct PyRunner {
@@ -38,7 +37,7 @@ pub struct PyRunner {
     #[pyo3(get)]
     pub removal_date: Option<i64>,
     // removal_date: Option<Py<PyDateTime>>,
-    pub removal_date_str: Option<StaticString<24>>,
+    pub removal_date_str: Option<FixedSizeString<24>>,
 }
 
 impl PyRunner {
@@ -75,7 +74,7 @@ impl PyRunner {
             adjustment_factor: self.adjustment_factor,
             handicap: self.handicap,
             sort_priority: self.sort_priority,
-            removal_date_str: self.removal_date_str.clone(),
+            removal_date_str: self.removal_date_str,
             removal_date: self.removal_date,
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
@@ -109,11 +108,12 @@ pub struct PyRunnerBookSP {
     lay_liability_taken: Vec<PriceSize>,
 }
 
-pub struct PyRunnerDefSeq<'a, 'py>(
-    pub &'a mut Vec<Py<PyRunner>>,
-    pub Python<'py>,
-    pub Config,
-);
+pub struct PyRunnerDefSeq<'a, 'py> {
+    pub runners: &'a mut Vec<Py<PyRunner>>,
+    pub config: Config,
+    pub img: bool,
+    pub py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
     type Value = ();
 
@@ -121,7 +121,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(&'a mut Vec<Py<PyRunner>>, Python<'py>, Config);
+        struct RunnerSeqVisitor<'a, 'py> {
+            runners: &'a mut Vec<Py<PyRunner>>,
+            config: Config,
+            img: bool,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = ();
 
@@ -134,10 +139,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                 A: serde::de::SeqAccess<'de>,
             {
                 // grow an empty vec
-                if self.0.capacity() == 0 {
+                if self.runners.capacity() == 0 {
                     match seq.size_hint() {
-                        Some(s) => self.0.reserve_exact(s + 2),
-                        None => self.0.reserve_exact(12),
+                        Some(s) => self.runners.reserve_exact(s + 2),
+                        None => self.runners.reserve_exact(12),
                     }
                 }
 
@@ -159,44 +164,65 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
                     let index = self
-                        .0
+                        .runners
                         .iter()
-                        .map(|r| r.borrow_mut(self.1))
+                        .map(|r| r.borrow_mut(self.py))
                         .position(|r| r.selection_id == rid.id);
                     match index {
                         Some(index) => {
                             let mut runner =
-                                unsafe { self.0.get_unchecked(index).borrow_mut(self.1) };
-                            PyRunnerDefinitonDeser(&mut runner, self.1, self.2)
-                                .deserialize(&mut deser)
-                                .map_err(Error::custom)?
+                                unsafe { self.runners.get_unchecked(index).borrow_mut(self.py) };
+                            PyRunnerDefinitonDeser {
+                                runner: &mut runner,
+                                config: self.config,
+                                img: self.img,
+                                py: self.py,
+                            }
+                            .deserialize(&mut deser)
+                            .map_err(Error::custom)?
                         }
                         None => {
-                            let mut runner = PyRunner::new(self.1);
-                            PyRunnerDefinitonDeser(&mut runner, self.1, self.2)
-                                .deserialize(&mut deser)
-                                .map_err(Error::custom)?;
+                            let mut runner = PyRunner::new(self.py);
+                            PyRunnerDefinitonDeser {
+                                runner: &mut runner,
+                                config: self.config,
+                                img: self.img,
+                                py: self.py,
+                            }
+                            .deserialize(&mut deser)
+                            .map_err(Error::custom)?;
 
-                            self.0.push(Py::new(self.1, runner).unwrap());
+                            self.runners.push(Py::new(self.py, runner).unwrap());
                         }
                     }
                 }
 
                 // this config flag will reorder the runners into the order specified in the sort priority
                 // as seen in the data files
-                if !self.2.stable_runner_index {
-                    self.0.sort_by_key(|r| r.borrow(self.1).sort_priority);
+                if !self.config.stable_runner_index {
+                    self.runners
+                        .sort_by_key(|r| r.borrow(self.py).sort_priority);
                 }
 
                 Ok(())
             }
         }
 
-        deserializer.deserialize_seq(RunnerSeqVisitor(self.0, self.1, self.2))
+        deserializer.deserialize_seq(RunnerSeqVisitor {
+            runners: self.runners,
+            config: self.config,
+            img: self.img,
+            py: self.py,
+        })
     }
 }
 
-struct PyRunnerDefinitonDeser<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
+struct PyRunnerDefinitonDeser<'a, 'py> {
+    pub runner: &'a mut PyRunner,
+    pub config: Config,
+    pub img: bool,
+    pub py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
     type Value = ();
 
@@ -217,7 +243,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
             Hc,
         }
 
-        struct RunnerDefVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
+        struct RunnerDefVisitor<'a, 'py> {
+            runner: &'a mut PyRunner,
+            _config: Config,
+            _img: bool,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerDefVisitor<'a, 'py> {
             type Value = ();
 
@@ -231,29 +262,30 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
             {
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Id => self.0.selection_id = map.next_value()?,
+                        Field::Id => self.runner.selection_id = map.next_value()?,
                         Field::AdjustmentFactor => {
-                            self.0.adjustment_factor = Some(map.next_value::<F64OrStr>()?.into())
+                            self.runner.adjustment_factor =
+                                Some(map.next_value::<F64OrStr>()?.into())
                         }
-                        Field::Status => self.0.status = map.next_value()?,
-                        Field::SortPriority => self.0.sort_priority = map.next_value()?,
-                        Field::Hc => self.0.handicap = Some(map.next_value::<F64OrStr>()?.into()),
+                        Field::Status => self.runner.status = map.next_value()?,
+                        Field::SortPriority => self.runner.sort_priority = map.next_value()?,
+                        Field::Hc => {
+                            self.runner.handicap = Some(map.next_value::<F64OrStr>()?.into())
+                        }
                         Field::Name => {
-                            self.0.name.set_if_ne(map.next_value::<Cow<str>>()?);
+                            self.runner.name.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::RemovalDate => {
-                            let s = map.next_value()?;
-                            if self.0.removal_date_str.set_if_ne(s) {
-                                let ts = chrono::DateTime::parse_from_rfc3339(s)
+                            let s = map.next_value::<FixedSizeString<24>>()?;
+                            if self.runner.removal_date_str.contains(&s) {
+                                let ts = chrono::DateTime::parse_from_rfc3339(s.as_str())
                                     .map_err(Error::custom)?
                                     .timestamp_millis();
-                                // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                // self.0.removal_date = Some(d.into_py(self.1));
-                                self.0.removal_date = Some(ts);
+                                self.runner.removal_date = Some(ts);
                             }
                         }
                         Field::Bsp => {
-                            let mut sp = self.0.sp.borrow_mut(self.1);
+                            let mut sp = self.runner.sp.borrow_mut(self.py);
                             sp.actual_sp = Some(map.next_value::<F64OrStr>()?.into());
                         }
                     }
@@ -275,16 +307,22 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
         deserializer.deserialize_struct(
             "RunnerDef",
             FIELDS,
-            RunnerDefVisitor(self.0, self.1, self.2),
+            RunnerDefVisitor {
+                runner: self.runner,
+                _config: self.config,
+                _img: self.img,
+                py: self.py,
+            },
         )
     }
 }
 
-pub struct PyRunnerChangeSeq<'a, 'py>(
-    pub &'a mut Vec<Py<PyRunner>>,
-    pub Python<'py>,
-    pub Config,
-);
+pub struct PyRunnerChangeSeq<'a, 'py> {
+    pub runners: &'a mut Vec<Py<PyRunner>>,
+    pub config: Config,
+    pub img: bool,
+    pub py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
     type Value = ();
 
@@ -292,7 +330,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(&'a mut Vec<Py<PyRunner>>, Python<'py>, Config);
+        struct RunnerSeqVisitor<'a, 'py> {
+            runners: &'a mut Vec<Py<PyRunner>>,
+            config: Config,
+            img: bool,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = ();
 
@@ -305,10 +348,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
                 A: serde::de::SeqAccess<'de>,
             {
                 // grow an empty vec
-                if self.0.capacity() == 0 {
+                if self.runners.capacity() == 0 {
                     match seq.size_hint() {
-                        Some(s) => self.0.reserve_exact(s + 2),
-                        None => self.0.reserve_exact(12),
+                        Some(s) => self.runners.reserve_exact(s + 2),
+                        None => self.runners.reserve_exact(12),
                     }
                 }
 
@@ -323,25 +366,35 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
                     let index = self
-                        .0
+                        .runners
                         .iter()
-                        .map(|r| r.borrow_mut(self.1))
+                        .map(|r| r.borrow_mut(self.py))
                         .position(|r| r.selection_id == rid.id);
                     match index {
                         Some(index) => {
                             let mut runner =
-                                unsafe { self.0.get_unchecked(index).borrow_mut(self.1) };
-                            PyRunnerChangeDeser(&mut runner, self.1, self.2)
-                                .deserialize(&mut deser)
-                                .map_err(Error::custom)?;
+                                unsafe { self.runners.get_unchecked(index).borrow_mut(self.py) };
+                            PyRunnerChangeDeser {
+                                runner: &mut runner,
+                                img: self.img,
+                                config: self.config,
+                                py: self.py,
+                            }
+                            .deserialize(&mut deser)
+                            .map_err(Error::custom)?;
                         }
                         None => {
-                            let mut runner = PyRunner::new(self.1);
-                            PyRunnerChangeDeser(&mut runner, self.1, self.2)
-                                .deserialize(&mut deser)
-                                .map_err(Error::custom)?;
+                            let mut runner = PyRunner::new(self.py);
+                            PyRunnerChangeDeser {
+                                runner: &mut runner,
+                                config: self.config,
+                                img: self.img,
+                                py: self.py,
+                            }
+                            .deserialize(&mut deser)
+                            .map_err(Error::custom)?;
 
-                            self.0.push(Py::new(self.1, runner).unwrap());
+                            self.runners.push(Py::new(self.py, runner).unwrap());
                         }
                     }
                 }
@@ -350,11 +403,21 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
             }
         }
 
-        deserializer.deserialize_seq(RunnerSeqVisitor(self.0, self.1, self.2))
+        deserializer.deserialize_seq(RunnerSeqVisitor {
+            runners: self.runners,
+            py: self.py,
+            config: self.config,
+            img: self.img,
+        })
     }
 }
 
-struct PyRunnerChangeDeser<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
+struct PyRunnerChangeDeser<'a, 'py> {
+    pub runner: &'a mut PyRunner,
+    pub config: Config,
+    pub img: bool,
+    pub py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
     type Value = ();
 
@@ -378,7 +441,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
             Hc,
         }
 
-        struct RunnerChangeVisitor<'a, 'py>(&'a mut PyRunner, Python<'py>, Config);
+        struct RunnerChangeVisitor<'a, 'py> {
+            runner: &'a mut PyRunner,
+            config: Config,
+            img: bool,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerChangeVisitor<'a, 'py> {
             type Value = ();
 
@@ -392,51 +460,77 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
             {
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Id => self.0.selection_id = map.next_value()?,
+                        Field::Id => self.runner.selection_id = map.next_value()?,
                         Field::Atb => {
-                            let mut ex = self.0.ex.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeLayLadder(&mut ex.available_to_back))?;
+                            let mut ex = self.runner.ex.borrow_mut(self.py);
+                            let atb = &mut ex.available_to_back;
+                            if self.img {
+                                atb.clear();
+                            }
+                            map.next_value_seed(PriceSizeLayLadder(atb))?;
                         }
                         Field::Atl => {
-                            let mut ex = self.0.ex.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeBackLadder(&mut ex.available_to_lay))?;
+                            let mut ex = self.runner.ex.borrow_mut(self.py);
+                            let atl = &mut ex.available_to_lay;
+                            if self.img {
+                                atl.clear();
+                            }
+                            map.next_value_seed(PriceSizeBackLadder(atl))?;
                         }
                         Field::Trd => {
-                            let mut ex = self.0.ex.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeBackLadder(&mut ex.traded_volume))?;
+                            let mut ex = self.runner.ex.borrow_mut(self.py);
+                            let trd = &mut ex.traded_volume;
+                            if self.img {
+                                trd.clear();
+                            }
 
-                            if self.2.cumulative_runner_tv {
-                                self.0.total_matched =
+                            map.next_value_seed(PriceSizeBackLadder(trd))?;
+
+                            if self.config.cumulative_runner_tv {
+                                self.runner.total_matched =
                                     ex.traded_volume.iter().map(|ps| ps.size).sum();
                             }
                         }
                         Field::Spb => {
-                            let mut sp = self.0.sp.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeLayLadder(&mut sp.lay_liability_taken))?;
+                            let mut sp = self.runner.sp.borrow_mut(self.py);
+                            let spb = &mut sp.lay_liability_taken;
+                            if self.img {
+                                spb.clear();
+                            }
+
+                            map.next_value_seed(PriceSizeLayLadder(spb))?;
                         }
                         Field::Spl => {
-                            let mut sp = self.0.sp.borrow_mut(self.1);
-                            map.next_value_seed(PriceSizeBackLadder(&mut sp.back_stake_taken))?;
+                            let mut sp = self.runner.sp.borrow_mut(self.py);
+                            let spl = &mut sp.back_stake_taken;
+                            if self.img {
+                                spl.clear();
+                            }
+
+                            map.next_value_seed(PriceSizeBackLadder(spl))?;
                         }
                         Field::Spn => {
-                            let mut sp = self.0.sp.borrow_mut(self.1);
+                            let mut sp = self.runner.sp.borrow_mut(self.py);
                             sp.near_price = Some(map.next_value::<F64OrStr>()?.into());
                         }
                         Field::Spf => {
-                            let mut sp = self.0.sp.borrow_mut(self.1);
+                            let mut sp = self.runner.sp.borrow_mut(self.py);
                             sp.far_price = Some(map.next_value::<F64OrStr>()?.into());
                         }
                         Field::Ltp => {
-                            self.0.last_price_traded = Some(map.next_value::<F64OrStr>()?.into())
+                            self.runner.last_price_traded =
+                                Some(map.next_value::<F64OrStr>()?.into())
                         }
-                        Field::Hc => self.0.handicap = Some(map.next_value::<F64OrStr>()?.into()),
+                        Field::Hc => {
+                            self.runner.handicap = Some(map.next_value::<F64OrStr>()?.into())
+                        }
                         // The betfair historic data files differ from the stream here, they send tv deltas
                         // that need to be accumulated, whereas the stream sends the value itself.
                         Field::Tv => {
-                            if self.2.cumulative_runner_tv {
+                            if self.config.cumulative_runner_tv {
                                 map.next_value::<IgnoredAny>()?;
                             } else {
-                                self.0.total_matched = map.next_value::<F64OrStr>()?.into();
+                                self.runner.total_matched = map.next_value::<F64OrStr>()?.into();
                             }
                         }
                     };
@@ -452,7 +546,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
         deserializer.deserialize_struct(
             "RunnerChange",
             FIELDS,
-            RunnerChangeVisitor(self.0, self.1, self.2),
+            RunnerChangeVisitor {
+                runner: self.runner,
+                config: self.config,
+                img: self.img,
+                py: self.py,
+            },
         )
     }
 }

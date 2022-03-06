@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 
 use crate::immutable::container::SyncObj;
@@ -14,8 +16,8 @@ pub struct RunnerBookSP {
     pub far_price: Option<FloatStr>,
     #[pyo3(get)]
     pub near_price: Option<FloatStr>,
-    pub back_stake_taken: SyncObj<Vec<PriceSize>>,
-    pub lay_liability_taken: SyncObj<Vec<PriceSize>>,
+    pub back_stake_taken: SyncObj<Arc<Vec<PriceSize>>>,
+    pub lay_liability_taken: SyncObj<Arc<Vec<PriceSize>>>,
 }
 
 #[derive(Default)]
@@ -37,10 +39,10 @@ impl RunnerBookSP {
                 near_price: update.near_price.or(self.near_price),
                 back_stake_taken: update
                     .back_stake_taken
-                    .map_or_else(|| self.back_stake_taken.clone(), SyncObj::new),
+                    .map_or_else(|| self.back_stake_taken.clone(), |ps| SyncObj::new(Arc::new(ps))),
                 lay_liability_taken: update
                     .lay_liability_taken
-                    .map_or_else(|| self.lay_liability_taken.clone(), SyncObj::new),
+                    .map_or_else(|| self.lay_liability_taken.clone(), |ps| SyncObj::new(Arc::new(ps))),
             },
         )
         .unwrap()

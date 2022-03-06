@@ -34,7 +34,7 @@ impl BflwIter {
         py: Python,
     ) -> Result<Vec<Py<MarketBook>>, serde_json::Error> {
         deser.with_dependent_mut(|_, deser| {
-            MarketBooksDeser(books, py, config).deserialize(&mut deser.0)
+            MarketBooksDeser{markets: books, py, config}.deserialize(&mut deser.0)
         })
     }
 }
@@ -101,11 +101,11 @@ impl<'p> PyIterProtocol for BflwIter {
                 .collect::<Vec<_>>();
             next_books.iter().for_each(|m1| {
                 let mb1 = m1.borrow(py);
-                let id1 = mb1.market_id.value.as_ref().as_str();
+                let id1: &str = mb1.market_id.as_ref();
 
                 let replace = books
                     .iter_mut()
-                    .position(|m2| id1 == (*m2).borrow(py).market_id.value.as_ref().as_str());
+                    .position(|m2| id1 == (*m2).borrow(py).market_id);
 
                 match replace {
                     Some(i) => books[i] = m1.clone_ref(py),

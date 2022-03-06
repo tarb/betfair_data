@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use pyo3::prelude::*;
 
 use crate::immutable::container::SyncObj;
@@ -6,9 +8,9 @@ use crate::price_size::PriceSize;
 #[derive(Clone, Default)]
 #[pyclass]
 pub struct RunnerBookEX {
-    pub available_to_back: SyncObj<Vec<PriceSize>>,
-    pub available_to_lay: SyncObj<Vec<PriceSize>>,
-    pub traded_volume: SyncObj<Vec<PriceSize>>,
+    pub available_to_back: SyncObj<Arc<Vec<PriceSize>>>,
+    pub available_to_lay: SyncObj<Arc<Vec<PriceSize>>>,
+    pub traded_volume: SyncObj<Arc<Vec<PriceSize>>>,
 }
 
 pub struct RunnerBookEXUpdate {
@@ -24,13 +26,13 @@ impl RunnerBookEX {
             Self {
                 available_to_back: update
                     .available_to_back
-                    .map_or_else(|| self.available_to_back.clone(), SyncObj::new),
+                    .map_or_else(|| self.available_to_back.clone(), |ps| SyncObj::new(Arc::new(ps))),
                 available_to_lay: update
                     .available_to_lay
-                    .map_or_else(|| self.available_to_lay.clone(), SyncObj::new),
+                    .map_or_else(|| self.available_to_lay.clone(), |ps| SyncObj::new(Arc::new(ps))),
                 traded_volume: update
                     .traded_volume
-                    .map_or_else(|| self.traded_volume.clone(), SyncObj::new),
+                    .map_or_else(|| self.traded_volume.clone(), |ps| SyncObj::new(Arc::new(ps))),
             },
         )
         .unwrap()

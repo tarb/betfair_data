@@ -1,5 +1,4 @@
 pub mod adapter;
-pub mod datetime;
 pub mod iter;
 pub mod market_book;
 pub mod market_definition;

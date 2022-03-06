@@ -7,7 +7,6 @@ use serde::{
 
 use std::fmt;
 
-
 #[derive(Debug, Copy, Clone, Default, PartialEq)]
 pub struct FloatStr(pub f64);
 

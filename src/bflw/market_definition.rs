@@ -3,14 +3,15 @@ use pyo3::prelude::*;
 use serde::de::{DeserializeSeed, MapAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use crate::bflw::market_definition_runner::RunnerDefSeq;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::ids::{EventID, EventTypeID};
 use crate::immutable::container::SyncObj;
 use crate::market_source::SourceConfig;
-
-use super::datetime::DateTimeString;
+use crate::strings::FixedSizeString;
+use crate::immutable::datetime::DateTimeString;
 use super::market_definition_runner::MarketDefinitionRunner;
 use super::runner_book::RunnerBook;
 
@@ -38,7 +39,7 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub market_time: SyncObj<DateTimeString>,
     #[pyo3(get)]
-    pub market_type: SyncObj<String>,
+    pub market_type: SyncObj<Arc<String>>,
     #[pyo3(get)]
     pub number_of_active_runners: u16,
     #[pyo3(get)]
@@ -48,9 +49,9 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub persistence_enabled: bool,
     #[pyo3(get)]
-    pub regulators: SyncObj<Vec<String>>,
+    pub regulators: SyncObj<Arc<Vec<String>>>,
     #[pyo3(get)]
-    pub runners: SyncObj<Vec<Py<MarketDefinitionRunner>>>,
+    pub runners: SyncObj<Arc<Vec<Py<MarketDefinitionRunner>>>>,
     #[pyo3(get)]
     pub runners_voidable: bool,
     #[pyo3(get)]
@@ -60,24 +61,23 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub suspend_time: Option<SyncObj<DateTimeString>>,
     #[pyo3(get)]
-    pub timezone: SyncObj<String>,
+    pub timezone: SyncObj<Arc<String>>,
     #[pyo3(get)]
     pub turn_in_play_enabled: bool,
     #[pyo3(get)]
-    pub venue: Option<SyncObj<String>>,
+    pub venue: Option<SyncObj<Arc<String>>>,
     #[pyo3(get)]
     pub version: u64,
     #[pyo3(get)]
-    pub country_code: Option<SyncObj<String>>,
+    pub country_code: Option<SyncObj<FixedSizeString<2>>>,
     #[pyo3(get)]
-    pub name: Option<SyncObj<String>>,
+    pub name: Option<SyncObj<Arc<String>>>,
     #[pyo3(get)]
-    pub event_name: Option<SyncObj<String>>,
+    pub event_name: Option<SyncObj<Arc<String>>>,
 
     // use getters to turn these into strings
     pub event_id: EventID,
     pub event_type_id: EventTypeID,
-    
     // lineMaxUnit: float = None,
     // lineMinUnit: float = None,
     // lineInterval: float = None,
@@ -140,7 +140,7 @@ impl MarketDefinition {
             betting_type: change.betting_type.unwrap_or_default(),
             regulators: change
                 .regulators
-                .map(|v| SyncObj::new(v.iter().map(|s| s.to_string()).collect()))
+                .map(|v| SyncObj::new(Arc::new(v.iter().map(|s| s.to_string()).collect())))
                 .unwrap_or_default(),
             bsp_reconciled: change.bsp_reconciled.unwrap_or_default(),
             bsp_market: change.bsp_market.unwrap_or_default(),
@@ -158,21 +158,28 @@ impl MarketDefinition {
             status: change.status.unwrap_or_default(),
             turn_in_play_enabled: change.turn_in_play_enabled.unwrap_or_default(),
             number_of_active_runners: change.number_of_active_runners.unwrap_or_default(),
-            runners: change.runners.map(SyncObj::new).unwrap_or_default(),
+            runners: change
+                .runners
+                .map(|r| SyncObj::new(Arc::new(r)))
+                .unwrap_or_default(),
             market_time: change
                 .market_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
                 .unwrap(),
             market_type: change
                 .market_type
-                .map(|s| SyncObj::new(String::from(s)))
+                .map(|s| SyncObj::new(Arc::new(String::from(s))))
                 .unwrap(),
             timezone: change
                 .timezone
-                .map(|s| SyncObj::new(String::from(s)))
+                .map(|s| SyncObj::new(Arc::new(String::from(s))))
                 .unwrap(),
-            venue: change.venue.map(|s| SyncObj::new(String::from(s))),
-            country_code: change.country_code.map(|s| SyncObj::new(String::from(s))),
+            venue: change
+                .venue
+                .map(|s| SyncObj::new(Arc::new(String::from(s)))),
+            country_code: change
+                .country_code
+                .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap())), // todo
             open_date: change
                 .open_date
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
@@ -183,8 +190,10 @@ impl MarketDefinition {
             suspend_time: change
                 .suspend_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
-            name: change.name.map(|s| SyncObj::new(s.into_owned())),
-            event_name: change.event_name.map(|s| SyncObj::new(s.into_owned())),
+            name: change.name.map(|s| SyncObj::new(Arc::new(s.into_owned()))),
+            event_name: change
+                .event_name
+                .map(|s| SyncObj::new(Arc::new(s.into_owned()))),
         }
     }
     fn update_from_change(&self, change: MarketDefinitionUpdate) -> Self {
@@ -219,23 +228,23 @@ impl MarketDefinition {
                 .unwrap_or_else(|| self.market_time.clone()),
             market_type: change
                 .market_type
-                .map(|s| SyncObj::new(String::from(s)))
+                .map(|s| SyncObj::new(Arc::new(String::from(s))))
                 .unwrap_or_else(|| self.market_type.clone()),
             regulators: change
                 .regulators
-                .map(|v| SyncObj::new(v.iter().map(|s| s.to_string()).collect()))
+                .map(|v| SyncObj::new(Arc::new(v.iter().map(|s| s.to_string()).collect())))
                 .unwrap_or_else(|| self.regulators.clone()),
             timezone: change
                 .timezone
-                .map(|s| SyncObj::new(String::from(s)))
+                .map(|s| SyncObj::new(Arc::new(String::from(s))))
                 .unwrap_or_else(|| self.timezone.clone()),
             venue: change
                 .venue
-                .map(|s| Some(SyncObj::new(String::from(s))))
+                .map(|s| Some(SyncObj::new(Arc::new(String::from(s)))))
                 .unwrap_or_else(|| self.venue.clone()),
             country_code: change
                 .country_code
-                .map(|s| Some(SyncObj::new(String::from(s))))
+                .map(|s| Some(SyncObj::new(FixedSizeString::try_from(s).unwrap()))) // todo
                 .unwrap_or_else(|| self.country_code.clone()),
             open_date: change
                 .open_date
@@ -251,27 +260,27 @@ impl MarketDefinition {
                 .or_else(|| self.suspend_time.clone()),
             name: change
                 .name
-                .map(|s| SyncObj::new(s.into_owned()))
+                .map(|s| SyncObj::new(Arc::new(s.into_owned())))
                 .or_else(|| self.name.clone()),
             event_name: change
                 .event_name
-                .map(|s| SyncObj::new(s.into_owned()))
+                .map(|s| SyncObj::new(Arc::new(s.into_owned())))
                 .or_else(|| self.event_name.clone()),
             runners: change
                 .runners
-                .map(SyncObj::new)
+                .map(|r| SyncObj::new(Arc::new(r)))
                 .unwrap_or_else(|| self.runners.clone()),
         }
     }
 }
 
 // Used for serializing in place over the mc marketDefinition object
-pub struct MarketDefinitionDeser<'a, 'py>(
-    pub Option<PyRef<'py, MarketDefinition>>,
-    pub Option<&'a Vec<Py<RunnerBook>>>,
-    pub Python<'py>,
-    pub SourceConfig,
-);
+pub struct MarketDefinitionDeser<'a, 'py> {
+    pub def: Option<PyRef<'py, MarketDefinition>>,
+    pub runners: Option<&'a Vec<Py<RunnerBook>>>,
+    pub py: Python<'py>,
+    pub config: SourceConfig,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
     type Value = (Option<MarketDefinition>, Option<Vec<Py<RunnerBook>>>);
 
@@ -321,12 +330,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
             Version,
         }
 
-        struct MarketDefinitionVisitor<'a, 'py>(
-            Option<PyRef<'py, MarketDefinition>>,
-            Option<&'a Vec<Py<RunnerBook>>>,
-            Python<'py>,
-            SourceConfig,
-        );
+        struct MarketDefinitionVisitor<'a, 'py> {
+            pub def: Option<PyRef<'py, MarketDefinition>>,
+            pub runners: Option<&'a Vec<Py<RunnerBook>>>,
+            pub py: Python<'py>,
+            pub config: SourceConfig,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitor<'a, 'py> {
             type Value = (Option<MarketDefinition>, Option<Vec<Py<RunnerBook>>>);
 
@@ -346,8 +355,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                     match key {
                         Field::BspMarket => {
                             let bsp_market = map.next_value()?;
-                            if self.0.is_some_with(|def| def.bsp_market != bsp_market)
-                                || self.0.is_none()
+                            if self.def.is_some_with(|def| def.bsp_market != bsp_market)
+                                || self.def.is_none()
                             {
                                 upt.bsp_market = Some(bsp_market);
                                 changed = true;
@@ -355,9 +364,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::TurnInPlayEnabled => {
                             let turn_in_play_enabled = map.next_value()?;
-                            if self.0.is_some_with(|def| {
+                            if self.def.is_some_with(|def| {
                                 def.turn_in_play_enabled != turn_in_play_enabled
-                            }) || self.0.is_none()
+                            }) || self.def.is_none()
                             {
                                 upt.turn_in_play_enabled = Some(turn_in_play_enabled);
                                 changed = true;
@@ -365,7 +374,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::InPlay => {
                             let in_play = map.next_value()?;
-                            if self.0.is_some_with(|def| def.in_play != in_play) || self.0.is_none()
+                            if self.def.is_some_with(|def| def.in_play != in_play)
+                                || self.def.is_none()
                             {
                                 upt.in_play = Some(in_play);
                                 changed = true;
@@ -374,9 +384,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::PersistenceEnabled => {
                             let persistence_enabled = map.next_value()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.persistence_enabled != persistence_enabled)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.persistence_enabled = Some(persistence_enabled);
                                 changed = true;
@@ -385,9 +395,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::BspReconciled => {
                             let bsp_reconciled = map.next_value()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.bsp_reconciled != bsp_reconciled)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.bsp_reconciled = Some(bsp_reconciled);
                                 changed = true;
@@ -395,8 +405,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Complete => {
                             let complete = map.next_value()?;
-                            if self.0.is_some_with(|def| def.complete != complete)
-                                || self.0.is_none()
+                            if self.def.is_some_with(|def| def.complete != complete)
+                                || self.def.is_none()
                             {
                                 upt.complete = Some(complete);
                                 changed = true;
@@ -405,9 +415,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::CrossMatching => {
                             let cross_matching = map.next_value()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.cross_matching != cross_matching)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.cross_matching = Some(cross_matching);
                                 changed = true;
@@ -416,9 +426,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::RunnersVoidable => {
                             let runners_voidable = map.next_value()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.runners_voidable != runners_voidable)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.runners_voidable = Some(runners_voidable);
                                 changed = true;
@@ -427,9 +437,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::DiscountAllowed => {
                             let discount_allowed = map.next_value()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.discount_allowed != discount_allowed)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.discount_allowed = Some(discount_allowed);
                                 changed = true;
@@ -438,9 +448,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::Timezone => {
                             let timezone = map.next_value::<&str>()?;
                             if self
-                                .0
-                                .is_some_with(|def| def.timezone.value.as_str() != timezone)
-                                || self.0.is_none()
+                                .def
+                                .is_some_with(|def| def.timezone.as_str() != timezone)
+                                || self.def.is_none()
                             {
                                 upt.timezone = Some(timezone);
                                 changed = true;
@@ -449,9 +459,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::Name => {
                             let market_name = map.next_value::<Cow<str>>()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| !def.name.contains(&market_name.as_ref()))
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.name = Some(market_name);
                                 changed = true;
@@ -460,9 +470,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::EventName => {
                             let event_name = map.next_value::<Cow<str>>()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| !def.event_name.contains(&event_name.as_ref()))
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.event_name = Some(event_name);
                                 changed = true;
@@ -471,9 +481,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::CountryCode => {
                             let country_code = map.next_value::<&str>()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| !def.country_code.contains(&country_code))
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.country_code = Some(country_code);
                                 changed = true;
@@ -481,8 +491,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Venue => {
                             let venue = map.next_value::<&str>()?;
-                            if self.0.is_some_with(|def| !def.venue.contains(&venue))
-                                || self.0.is_none()
+                            if self.def.is_some_with(|def| !def.venue.contains(&venue))
+                                || self.def.is_none()
                             {
                                 upt.venue = Some(venue);
                                 changed = true;
@@ -490,7 +500,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Status => {
                             let status = map.next_value()?;
-                            if self.0.is_some_with(|def| def.status != status) || self.0.is_none() {
+                            if self.def.is_some_with(|def| def.status != status)
+                                || self.def.is_none()
+                            {
                                 upt.status = Some(status);
                                 changed = true;
                             }
@@ -498,9 +510,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::MarketBaseRate => {
                             let market_base_rate = map.next_value::<f32>()?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.market_base_rate != market_base_rate)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.market_base_rate = Some(market_base_rate);
                                 changed = true;
@@ -509,9 +521,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::NumberOfWinners => {
                             let number_of_winners = map.next_value::<f32>()? as u8;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.number_of_winners != number_of_winners)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.number_of_winners = Some(number_of_winners);
                                 changed = true;
@@ -519,9 +531,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::NumberOfActiveRunners => {
                             let number_of_active_runners = map.next_value()?;
-                            if self.0.is_some_with(|def| {
+                            if self.def.is_some_with(|def| {
                                 def.number_of_active_runners != number_of_active_runners
-                            }) || self.0.is_none()
+                            }) || self.def.is_none()
                             {
                                 upt.number_of_active_runners = Some(number_of_active_runners);
                                 changed = true;
@@ -529,8 +541,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::BetDelay => {
                             let bet_delay = map.next_value()?;
-                            if self.0.is_some_with(|def| def.bet_delay != bet_delay)
-                                || self.0.is_none()
+                            if self.def.is_some_with(|def| def.bet_delay != bet_delay)
+                                || self.def.is_none()
                             {
                                 upt.bet_delay = Some(bet_delay);
                                 changed = true;
@@ -541,8 +553,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 .next_value::<&str>()?
                                 .parse()
                                 .map_err(de::Error::custom)?;
-                            if self.0.is_some_with(|def| def.event_id != event_id)
-                                || self.0.is_none()
+                            if self.def.is_some_with(|def| def.event_id != event_id)
+                                || self.def.is_none()
                             {
                                 upt.event_id = Some(event_id);
                                 changed = true;
@@ -554,9 +566,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 .parse()
                                 .map_err(de::Error::custom)?;
                             if self
-                                .0
+                                .def
                                 .is_some_with(|def| def.event_type_id != event_type_id)
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.event_type_id = Some(event_type_id);
                                 changed = true;
@@ -564,18 +576,23 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Version => {
                             let version = map.next_value()?;
-                            if self.0.is_some_with(|def| def.version != version) || self.0.is_none()
+                            if self.def.is_some_with(|def| def.version != version)
+                                || self.def.is_none()
                             {
                                 upt.version = Some(version);
                                 changed = true;
                             }
                         }
                         Field::Runners => {
-                            let s1 = self.0.as_ref().map(|def| def.runners.value.as_ref());
-                            let s2 = self.1;
+                            let s1 = self.def.as_ref().map(|def| def.runners.as_ref());
+                            let s2 = self.runners;
 
-                            let (d, b) =
-                                map.next_value_seed(RunnerDefSeq(s1, s2, self.2, self.3))?;
+                            let (d, b) = map.next_value_seed(RunnerDefSeq {
+                                defs: s1,
+                                books: s2,
+                                py: self.py,
+                                config: self.config,
+                            })?;
 
                             changed = d.is_some();
                             upt.runners = d;
@@ -584,9 +601,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::MarketType => {
                             let market_type = map.next_value::<&str>()?;
                             if self
-                                .0
-                                .is_some_with(|def| def.market_type.value.as_str() != market_type)
-                                || self.0.is_none()
+                                .def
+                                .is_some_with(|def| def.market_type.as_str() != market_type)
+                                || self.def.is_none()
                             {
                                 upt.market_type = Some(market_type);
                                 changed = true;
@@ -594,7 +611,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::BettingType => {
                             let betting_type = map.next_value()?;
-                            if self.0.is_some_with(|def| def.betting_type != betting_type) {
+                            if self
+                                .def
+                                .is_some_with(|def| def.betting_type != betting_type)
+                            {
                                 upt.betting_type = Some(betting_type);
                                 changed = true;
                             }
@@ -603,9 +623,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::MarketTime => {
                             let market_time = map.next_value()?;
                             if self
-                                .0
-                                .is_some_with(|def| def.market_time.value.as_str() != market_time)
-                                || self.0.is_none()
+                                .def
+                                .is_some_with(|def| def.market_time.as_str() != market_time)
+                                || self.def.is_none()
                             {
                                 upt.market_time = Some(market_time);
                                 changed = true;
@@ -614,9 +634,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::SuspendTime => {
                             let suspend_time = map.next_value::<&str>()?;
                             if !self
-                                .0
+                                .def
                                 .is_some_with(|def| def.suspend_time.contains(&suspend_time))
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.suspend_time = Some(suspend_time);
                                 changed = true;
@@ -625,9 +645,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::SettledTime => {
                             let settled_time = map.next_value::<&str>()?;
                             if !self
-                                .0
+                                .def
                                 .is_some_with(|def| def.settled_time.contains(&settled_time))
-                                || self.0.is_none()
+                                || self.def.is_none()
                             {
                                 upt.settled_time = Some(settled_time);
                                 changed = true;
@@ -636,9 +656,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::OpenDate => {
                             let open_date = map.next_value()?;
                             if self
-                                .0
-                                .is_some_with(|def| def.open_date.value.as_str() != open_date)
-                                || self.0.is_none()
+                                .def
+                                .is_some_with(|def| def.open_date.as_str() != open_date)
+                                || self.def.is_none()
                             {
                                 upt.open_date = Some(open_date);
                                 changed = true;
@@ -648,10 +668,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::Regulators => {
                             let v = map.next_value::<Vec<&str>>()?;
 
-                            if self.0.is_some_with(|def| {
-                                (def.regulators.value.is_empty() && !v.is_empty())
-                                    || !def.regulators.value.iter().eq(v.iter())
-                            }) || self.0.is_none()
+                            if self.def.is_some_with(|def| {
+                                (def.regulators.is_empty() && !v.is_empty())
+                                    || !def.regulators.iter().eq(v.iter())
+                            }) || self.def.is_none()
                             {
                                 upt.regulators = Some(v);
                                 changed = true;
@@ -664,32 +684,32 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::RaceType => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.def.source, self.def.file);
                         }
                         Field::KeyLineDefiniton => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.def.source, self.def.file);
                         }
                         Field::PriceLadderDefinition => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.def.source, self.def.file);
                         }
                         Field::LineMaxUnit => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.def.source, self.def.file);
                         }
                         Field::LineMinUnit => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.def.source, self.def.file);
                         }
                         Field::LineInterval => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
+                            // panic!("{} {}", self.def.source, self.def.file);
                         }
                     }
                 }
 
-                let def = match self.0 {
+                let def = match self.def {
                     Some(def) => changed.then(|| def.update_from_change(upt)),
                     None => Some(MarketDefinition::new(upt)),
                 };
@@ -741,7 +761,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
         deserializer.deserialize_struct(
             "MarketDefinition",
             FIELDS,
-            MarketDefinitionVisitor(self.0, self.1, self.2, self.3),
+            MarketDefinitionVisitor {
+                def: self.def,
+                runners: self.runners,
+                py: self.py,
+                config: self.config,
+            },
         )
     }
 }

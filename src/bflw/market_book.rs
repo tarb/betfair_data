@@ -3,8 +3,8 @@ use serde::de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 use std::fmt;
+use std::sync::Arc;
 
-use super::datetime::{DateTime, DateTimeString};
 use super::market_definition::MarketDefinition;
 use super::runner_book::RunnerBook;
 use crate::bflw::market_definition::MarketDefinitionDeser;
@@ -13,6 +13,7 @@ use crate::bflw::RoundToCents;
 use crate::enums::MarketStatus;
 use crate::ids::MarketID;
 use crate::immutable::container::SyncObj;
+use crate::immutable::datetime::{DateTime, DateTimeString};
 use crate::market_source::SourceConfig;
 
 #[pyclass]
@@ -48,7 +49,7 @@ pub struct MarketBook {
     #[pyo3(get)]
     pub version: u64,
     #[pyo3(get)]
-    pub runners: SyncObj<Vec<Py<RunnerBook>>>,
+    pub runners: SyncObj<Arc<Vec<Py<RunnerBook>>>>,
     #[pyo3(get)]
     pub market_definition: Py<MarketDefinition>,
     #[pyo3(get)]
@@ -96,8 +97,8 @@ impl MarketBook {
         //     .unwrap_or_default();
 
         Self {
-            market_id: SyncObj::new(MarketID::from(change.market_id)),
-            runners: SyncObj::new(change.runners.unwrap_or_default()),
+            market_id: SyncObj::new(MarketID::try_from(change.market_id).unwrap()),
+            runners: SyncObj::new(Arc::new(change.runners.unwrap_or_default())),
             total_matched: change.total_volume.unwrap_or_default(),
             bet_delay: def.bet_delay,
             bsp_reconciled: def.bsp_reconciled,
@@ -106,7 +107,7 @@ impl MarketBook {
             inplay: def.in_play,
             is_market_data_delayed: None,
             number_of_active_runners: def.number_of_active_runners,
-            number_of_runners: def.runners.value.len() as u16,
+            number_of_runners: def.runners.len() as u16,
             runners_voidable: def.runners_voidable,
             status: def.status,
             number_of_winners: def.number_of_winners,
@@ -136,7 +137,7 @@ impl MarketBook {
             market_id: self.market_id.clone(),
             runners: change
                 .runners
-                .map(SyncObj::new)
+                .map(|r| SyncObj::new(Arc::new(r)))
                 .unwrap_or_else(|| self.runners.clone()),
             total_matched: change.total_volume.unwrap_or(self.total_matched),
             bet_delay: change
@@ -173,7 +174,7 @@ impl MarketBook {
             number_of_runners: change
                 .definition
                 .as_ref()
-                .map(|def| def.runners.value.len() as u16)
+                .map(|def| def.runners.len() as u16)
                 .unwrap_or(self.number_of_runners),
             runners_voidable: change
                 .definition
@@ -207,7 +208,11 @@ impl MarketBook {
     }
 }
 
-pub struct MarketBooksDeser<'a, 'py>(pub &'a [Py<MarketBook>], pub Python<'py>, pub SourceConfig);
+pub struct MarketBooksDeser<'a, 'py> {
+    pub markets: &'a [Py<MarketBook>],
+    pub py: Python<'py>,
+    pub config: SourceConfig,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
     type Value = Vec<Py<MarketBook>>;
 
@@ -224,7 +229,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
             Mc,
         }
 
-        struct MarketBooksDeserVisitor<'a, 'py>(&'a [Py<MarketBook>], Python<'py>, SourceConfig);
+        struct MarketBooksDeserVisitor<'a, 'py> {
+            markets: &'a [Py<MarketBook>],
+            py: Python<'py>,
+            config: SourceConfig,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for MarketBooksDeserVisitor<'a, 'py> {
             type Value = Vec<Py<MarketBook>>;
 
@@ -251,7 +260,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
                             map.next_value::<IgnoredAny>()?;
                         }
                         Field::Mc => {
-                            books = map.next_value_seed(MarketMcSeq(self.0, self.1, self.2))?;
+                            books = map.next_value_seed(MarketMcSeq {
+                                markets: self.markets,
+                                py: self.py,
+                                config: self.config,
+                            })?;
                         }
                     }
                 }
@@ -259,7 +272,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
                 if let Some(pt) = pt {
                     books
                         .iter_mut()
-                        .for_each(|mb| mb.borrow_mut(self.1).publish_time = pt);
+                        .for_each(|mb| mb.borrow_mut(self.py).publish_time = pt);
                 }
 
                 Ok(books)
@@ -270,13 +283,21 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
         deserializer.deserialize_struct(
             "MarketBook",
             FIELDS,
-            MarketBooksDeserVisitor(self.0, self.1, self.2),
+            MarketBooksDeserVisitor {
+                markets: self.markets,
+                py: self.py,
+                config: self.config,
+            },
         )
     }
 }
 
 // Used for serializing in place over the marketChange `mc` array
-struct MarketMcSeq<'a, 'py>(&'a [Py<MarketBook>], Python<'py>, SourceConfig);
+struct MarketMcSeq<'a, 'py> {
+    markets: &'a [Py<MarketBook>],
+    py: Python<'py>,
+    config: SourceConfig,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
     type Value = Vec<Py<MarketBook>>;
 
@@ -284,7 +305,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct MarketMcSeqVisitor<'a, 'py>(&'a [Py<MarketBook>], Python<'py>, SourceConfig);
+        struct MarketMcSeqVisitor<'a, 'py> {
+            markets: &'a [Py<MarketBook>],
+            py: Python<'py>,
+            config: SourceConfig,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for MarketMcSeqVisitor<'a, 'py> {
             type Value = Vec<Py<MarketBook>>;
 
@@ -315,32 +340,44 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                         } else {
                             next_books
                                 .iter()
-                                .find(|m| (*m).borrow(self.1).market_id.value.as_str() == mid.id)
+                                .find(|m| (*m).borrow(self.py).market_id.as_str() == mid.id)
                                 .or_else(|| {
-                                    self.0.iter().find(|m| {
-                                        (*m).borrow(self.1).market_id.value.as_str() == mid.id
+                                    self.markets.iter().find(|m| {
+                                        (*m).borrow(self.py).market_id.as_str() == mid.id
                                     })
                                 })
-                                .map(|o| o.borrow(self.1))
+                                .map(|o| o.borrow(self.py))
                         }
                     };
 
-                    let next_mb = MarketMc(mb, self.1, self.2)
-                        .deserialize(&mut deser)
-                        .map_err(Error::custom)?;
+                    let next_mb = MarketMc {
+                        market: mb,
+                        py: self.py,
+                        config: self.config,
+                    }
+                    .deserialize(&mut deser)
+                    .map_err(Error::custom)?;
 
-                    next_books.push(Py::new(self.1, next_mb).unwrap());
+                    next_books.push(Py::new(self.py, next_mb).unwrap());
                 }
 
                 Ok(next_books)
             }
         }
 
-        deserializer.deserialize_seq(MarketMcSeqVisitor(self.0, self.1, self.2))
+        deserializer.deserialize_seq(MarketMcSeqVisitor {
+            markets: self.markets,
+            py: self.py,
+            config: self.config,
+        })
     }
 }
 
-struct MarketMc<'py>(Option<PyRef<'py, MarketBook>>, Python<'py>, SourceConfig);
+struct MarketMc<'py> {
+    market: Option<PyRef<'py, MarketBook>>,
+    py: Python<'py>,
+    config: SourceConfig,
+}
 impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
     type Value = MarketBook;
 
@@ -363,7 +400,11 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
             StreamId,
         }
 
-        struct MarketMcVisitor<'py>(Option<PyRef<'py, MarketBook>>, Python<'py>, SourceConfig);
+        struct MarketMcVisitor<'py> {
+            market: Option<PyRef<'py, MarketBook>>,
+            py: Python<'py>,
+            config: SourceConfig,
+        }
         impl<'de, 'py> Visitor<'de> for MarketMcVisitor<'py> {
             type Value = MarketBook;
 
@@ -384,45 +425,48 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                         }
                         Field::MarketDefinition => {
                             let def = self
-                                .0
+                                .market
                                 .as_ref()
-                                .map(|mb| mb.market_definition.borrow(self.1));
-                            let runners = upt
-                                .runners
-                                .as_ref()
-                                .or_else(|| self.0.as_ref().map(|mb| mb.runners.value.as_ref()));
+                                .map(|mb| mb.market_definition.borrow(self.py));
+                            let runners = upt.runners.as_ref().or_else(|| {
+                                self.market.as_ref().map(|mb| mb.runners.as_ref())
+                            });
 
-                            let (d, r) = map.next_value_seed(MarketDefinitionDeser(
-                                def, runners, self.1, self.2,
-                            ))?;
+                            let (d, r) = map.next_value_seed(MarketDefinitionDeser {
+                                def,
+                                runners,
+                                py: self.py,
+                                config: self.config,
+                            })?;
 
                             upt.definition = d;
                             upt.runners = r;
                         }
                         Field::Rc => {
-                            let runners = upt
-                                .runners
-                                .as_ref()
-                                .or_else(|| self.0.as_ref().map(|mb| mb.runners.value.as_ref()));
-                            upt.runners = Some(
-                                map.next_value_seed(RunnerChangeSeq(runners, self.1, self.2))?,
-                            );
+                            let runners = upt.runners.as_ref().or_else(|| {
+                                self.market.as_ref().map(|mb| mb.runners.as_ref())
+                            });
+                            upt.runners = Some(map.next_value_seed(RunnerChangeSeq {
+                                runners,
+                                py: self.py,
+                                config: self.config,
+                            })?);
 
                             // if cumulative_runner_tv is on, then tv shouldnt be sent at a market level and will have
                             // to be derived from the sum of runner tv's. This happens when using the data provided
                             // from betfair historical data service, not saved from the actual stream
-                            if self.2.cumulative_runner_tv {
+                            if self.config.cumulative_runner_tv {
                                 upt.total_volume = upt
                                     .runners
                                     .as_ref()
                                     .map(|rs| {
-                                        rs.iter().map(|r| r.borrow(self.1).total_matched).sum()
+                                        rs.iter().map(|r| r.borrow(self.py).total_matched).sum()
                                     })
                                     .map(|f: f64| f.round_cent());
                             }
                         }
                         Field::Tv => {
-                            if !self.2.cumulative_runner_tv {
+                            if !self.config.cumulative_runner_tv {
                                 upt.total_volume = Some(map.next_value::<f64>()?.round_cent());
                             } else {
                                 map.next_value::<IgnoredAny>()?;
@@ -440,10 +484,10 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                     }
                 }
 
-                let mb = match (self.0, &upt.definition) {
-                    (Some(mb), Some(_)) => mb.update_from_change(upt, self.1),
-                    (Some(mb), None) => mb.update_from_change(upt, self.1),
-                    (None, Some(_)) => MarketBook::new(upt, self.1),
+                let mb = match (self.market, &upt.definition) {
+                    (Some(mb), Some(_)) => mb.update_from_change(upt, self.py),
+                    (Some(mb), None) => mb.update_from_change(upt, self.py),
+                    (None, Some(_)) => MarketBook::new(upt, self.py),
                     (None, None) => {
                         return Err(Error::custom("missing definition on initial market update"))
                     }
@@ -457,7 +501,11 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
         deserializer.deserialize_struct(
             "MarketChange",
             FIELDS,
-            MarketMcVisitor(self.0, self.1, self.2),
+            MarketMcVisitor {
+                market: self.market,
+                py: self.py,
+                config: self.config,
+            },
         )
     }
 }

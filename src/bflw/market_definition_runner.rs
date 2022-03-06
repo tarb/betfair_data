@@ -1,15 +1,17 @@
 use core::fmt;
+use std::sync::Arc;
 use pyo3::{prelude::*, types::PyList};
 use serde::{
     de::{DeserializeSeed, Visitor},
     Deserialize, Deserializer,
 };
 
-use super::{datetime::DateTimeString, float_str::FloatStr, runner_book::RunnerBook};
+use super::{float_str::FloatStr, runner_book::RunnerBook};
 use crate::{
     enums::SelectionStatus,
     ids::SelectionID,
     immutable::container::{PyRep, SyncObj},
+    immutable::datetime::DateTimeString,
     market_source::SourceConfig,
 };
 
@@ -34,7 +36,7 @@ pub struct MarketDefinitionRunner {
     #[pyo3(get)]
     status: SelectionStatus,
     #[pyo3(get)]
-    name: Option<SyncObj<String>>,
+    name: Option<SyncObj<Arc<String>>>,
     #[pyo3(get)]
     handicap: FloatStr,
     #[pyo3(get)]
@@ -63,7 +65,7 @@ impl MarketDefinitionRunner {
             handicap: change.hc.unwrap_or(FloatStr(0.0)),
             bsp: change.bsp,
             sort_priority: change.sort_priority,
-            name: change.name.map(|s| SyncObj::new(String::from(s))),
+            name: change.name.map(|s| SyncObj::new(Arc::new(String::from(s)))),
             removal_date: change
                 .removal_date
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
@@ -79,11 +81,11 @@ impl MarketDefinitionRunner {
             || ((self.name.is_none() && change.name.is_some())
                 || self
                     .name
-                    .is_some_with(|s| !change.name.contains(&s.value.as_str())))
+                    .is_some_with(|s| !change.name.contains(&s.as_str())))
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
                     .removal_date
-                    .is_some_with(|s| !change.removal_date.contains(&s.value.as_str())))
+                    .is_some_with(|s| !change.removal_date.contains(&s.as_str())))
     }
 
     fn update_from_change(&self, change: &MarketDefRunnerUpdate) -> Self {
@@ -105,7 +107,7 @@ impl MarketDefinitionRunner {
                     if self.name.contains(&n) {
                         self.name.clone()
                     } else {
-                        Some(SyncObj::new(String::from(n)))
+                        Some(SyncObj::new(Arc::new(String::from(n))))
                     }
                 })
                 .or_else(|| self.name.clone()),
@@ -130,12 +132,12 @@ impl PyRep for Vec<Py<MarketDefinitionRunner>> {
     }
 }
 
-pub struct RunnerDefSeq<'a, 'py>(
-    pub Option<&'a Vec<Py<MarketDefinitionRunner>>>,
-    pub Option<&'a Vec<Py<RunnerBook>>>,
-    pub Python<'py>,
-    pub SourceConfig,
-);
+pub struct RunnerDefSeq<'a, 'py> {
+    pub defs: Option<&'a Vec<Py<MarketDefinitionRunner>>>,
+    pub books: Option<&'a Vec<Py<RunnerBook>>>,
+    pub py: Python<'py>,
+    pub config: SourceConfig,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
     type Value = (
         Option<Vec<Py<MarketDefinitionRunner>>>,
@@ -146,12 +148,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>(
-            Option<&'a Vec<Py<MarketDefinitionRunner>>>,
-            Option<&'a Vec<Py<RunnerBook>>>,
-            Python<'py>,
-            SourceConfig,
-        );
+        struct RunnerSeqVisitor<'a, 'py>{
+            defs: Option<&'a Vec<Py<MarketDefinitionRunner>>>,
+            books: Option<&'a Vec<Py<RunnerBook>>>,
+            py: Python<'py>,
+            #[allow(dead_code)]
+            config: SourceConfig,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = (
                 Option<Vec<Py<MarketDefinitionRunner>>>,
@@ -172,14 +175,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                 while let Some(change) = seq.next_element::<MarketDefRunnerUpdate>()? {
                     let index = {
                         (
-                            self.0.and_then(|rs| {
+                            self.defs.and_then(|rs| {
                                 rs.iter()
-                                    .map(|r| r.borrow_mut(self.2))
+                                    .map(|r| r.borrow_mut(self.py))
                                     .position(|r| r.selection_id == change.id)
                             }),
-                            self.1.and_then(|rs| {
+                            self.books.and_then(|rs| {
                                 rs.iter()
-                                    .map(|r| r.borrow_mut(self.2))
+                                    .map(|r| r.borrow_mut(self.py))
                                     .position(|r| r.selection_id == change.id)
                             }),
                         )
@@ -190,19 +193,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                     // should be that of the new runnerdefs
 
                     // marketRunnerDef
-                    match (self.0, index.0) {
+                    match (self.defs, index.0) {
                         (Some(from), Some(index)) => {
-                            let runner = unsafe { from.get_unchecked(index).borrow(self.2) };
+                            let runner = unsafe { from.get_unchecked(index).borrow(self.py) };
 
                             if runner.would_change(&change) {
                                 match defs.as_mut() {
                                     Some(defs) => {
                                         defs.push(
-                                            Py::new(self.2, runner.update_from_change(&change))
+                                            Py::new(self.py, runner.update_from_change(&change))
                                                 .unwrap(),
                                         );
                                         // defs[index] =
-                                        //     Py::new(self.2, runner.update_from_change(&change))
+                                        //     Py::new(self.py, runner.update_from_change(&change))
                                         //         .unwrap()
                                     }
                                     None => {
@@ -212,7 +215,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                                 10,
                                             ));
                                             defs.push(
-                                                Py::new(self.2, runner.update_from_change(&change))
+                                                Py::new(self.py, runner.update_from_change(&change))
                                                     .unwrap(),
                                             );
                                             Some(defs)
@@ -224,12 +227,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                         //         .map(|(i, pr)| {
                                         //             if index == i {
                                         //                 Py::new(
-                                        //                     self.2,
+                                        //                     self.py,
                                         //                     runner.update_from_change(&change),
                                         //                 )
                                         //                 .unwrap()
                                         //             } else {
-                                        //                 pr.clone_ref(self.2)
+                                        //                 pr.clone_ref(self.py)
                                         //             }
                                         //         })
                                         //         .collect(),
@@ -240,7 +243,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                         }
                         (Some(from), None) => {
                             let runner =
-                                Py::new(self.2, MarketDefinitionRunner::new(&change)).unwrap();
+                                Py::new(self.py, MarketDefinitionRunner::new(&change)).unwrap();
 
                             match defs.as_mut() {
                                 Some(defs) => defs.push(runner),
@@ -256,7 +259,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                         }
                         (None, None) => {
                             let runner =
-                                Py::new(self.2, MarketDefinitionRunner::new(&change)).unwrap();
+                                Py::new(self.py, MarketDefinitionRunner::new(&change)).unwrap();
 
                             match defs.as_mut() {
                                 Some(defs) => defs.push(runner),
@@ -271,15 +274,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                     }
 
                     // runner books
-                    match (self.1, index.1) {
+                    match (self.books, index.1) {
                         (Some(from), Some(index)) => {
-                            let runner = unsafe { from.get_unchecked(index).borrow(self.2) };
+                            let runner = unsafe { from.get_unchecked(index).borrow(self.py) };
 
-                            if runner.would_change(&change, self.2) {
+                            if runner.would_change(&change, self.py) {
                                 match books.as_mut() {
                                     Some(defs) => {
                                         defs[index] =
-                                            Py::new(self.2, runner.update_from_def(&change, self.2))
+                                            Py::new(self.py, runner.update_from_def(&change, self.py))
                                                 .unwrap()
                                     }
                                     None => {
@@ -289,12 +292,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                                 .map(|(i, pr)| {
                                                     if index == i {
                                                         Py::new(
-                                                            self.2,
-                                                            runner.update_from_def(&change, self.2),
+                                                            self.py,
+                                                            runner.update_from_def(&change, self.py),
                                                         )
                                                         .unwrap()
                                                     } else {
-                                                        pr.clone_ref(self.2)
+                                                        pr.clone_ref(self.py)
                                                     }
                                                 })
                                                 .collect(),
@@ -304,9 +307,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             }
                         }
                         (Some(from), None) => {
-                            let runner = RunnerBook::new(change.id, self.2);
+                            let runner = RunnerBook::new(change.id, self.py);
                             let runner =
-                                Py::new(self.2, runner.update_from_def(&change, self.2)).unwrap();
+                                Py::new(self.py, runner.update_from_def(&change, self.py)).unwrap();
 
                             match books.as_mut() {
                                 Some(defs) => defs.push(runner),
@@ -321,9 +324,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             };
                         }
                         (None, None) => {
-                            let runner = RunnerBook::new(change.id, self.2);
+                            let runner = RunnerBook::new(change.id, self.py);
                             let runner =
-                                Py::new(self.2, runner.update_from_def(&change, self.2)).unwrap();
+                                Py::new(self.py, runner.update_from_def(&change, self.py)).unwrap();
 
                             match books.as_mut() {
                                 Some(defs) => defs.push(runner),
@@ -342,6 +345,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
             }
         }
 
-        deserializer.deserialize_seq(RunnerSeqVisitor(self.0, self.1, self.2, self.3))
+        deserializer.deserialize_seq(RunnerSeqVisitor{defs: self.defs, books: self.books, py: self.py, config: self.config})
     }
 }

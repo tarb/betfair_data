@@ -5,7 +5,7 @@ use serde::{
     de::{self, DeserializeSeed, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
-use staticvec::StaticString;
+use serde_json::value::RawValue;
 use std::borrow::Cow;
 use std::fmt;
 use std::path::PathBuf;
@@ -14,9 +14,9 @@ use crate::deser::DeserializerWithData;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::errors::DeserErr;
 use crate::ids::{EventID, EventTypeID, MarketID};
-use crate::market_source::{SourceItem};
+use crate::market_source::SourceItem;
 use crate::mutable::runner::{PyRunner, PyRunnerChangeSeq, PyRunnerDefSeq};
-use crate::strings::StringSetExtNeq;
+use crate::strings::{FixedSizeString, StringSetExtNeq};
 
 use super::config::Config;
 
@@ -82,19 +82,19 @@ pub struct PyMarketBase {
     betting_type: MarketBettingType,
     #[pyo3(get)]
     market_time: i64,
-    market_time_str: StaticString<24>,
+    market_time_str: FixedSizeString<24>,
     #[pyo3(get)]
     open_date: i64,
-    open_date_str: StaticString<24>,
+    open_date_str: FixedSizeString<24>,
     #[pyo3(get)]
     suspend_time: Option<i64>,
-    suspend_time_str: Option<StaticString<24>>,
+    suspend_time_str: Option<FixedSizeString<24>>,
     #[pyo3(get)]
     settled_time: Option<i64>,
-    settled_time_str: Option<StaticString<24>>,
+    settled_time_str: Option<FixedSizeString<24>>,
     // need getters
     market_id: MarketID,
-    country_code: StaticString<2>,
+    country_code: FixedSizeString<2>,
 }
 
 impl PyMarketBase {
@@ -165,15 +165,15 @@ impl PyMarketBase {
             each_way_divisor: self.each_way_divisor,
             market_type: self.market_type.clone(),
             betting_type: self.betting_type,
-            market_id: self.market_id.clone(),
+            market_id: self.market_id,
             timezone: self.timezone.clone(),
             market_name: self.market_name.clone(),
             event_name: self.event_name.clone(),
-            country_code: self.country_code.clone(),
-            market_time_str: self.market_time_str.clone(),
-            open_date_str: self.open_date_str.clone(),
-            suspend_time_str: self.suspend_time_str.clone(),
-            settled_time_str: self.settled_time_str.clone(),
+            country_code: self.country_code,
+            market_time_str: self.market_time_str,
+            open_date_str: self.open_date_str,
+            suspend_time_str: self.suspend_time_str,
+            settled_time_str: self.settled_time_str,
             market_time: self.market_time,
             open_date: self.open_date,
             suspend_time: self.suspend_time,
@@ -191,6 +191,49 @@ impl PyMarketBase {
             runners,
         }
     }
+
+    /* fn clear(&mut self, py: Python) -> Self {
+
+        // self.bet_delay = 0;
+        // self.bsp_market = false;
+        self.bsp_reconciled = false;
+        self.clk.clear();
+        self.complete = false;
+        self.cross_matching = false;
+        self.discount_allowed = false;
+        self.each_way_divisor = None;
+        self.event_id = 0;
+        self.event_name = None;
+        self.event_type_id = 0;
+        self.in_play = false;
+        self.market_base_rate = 0;
+        self.market_type.clear();
+        self.market_name: Option<String>,
+        self.number_of_active_runners: u16,
+        self.number_of_winners: u8,
+        self.persistence_enabled = false;
+        self.publish_time: u64,
+        self.runners_voidable = false;
+        self.timezone.clear();
+        self.total_matched = 0;
+        self.turn_in_play_enabled = false;
+        self.venue = None;
+        self.version: u64,
+        self.runners: Vec<Py<PyRunner>>,
+        self.status: MarketStatus,
+        self.betting_type: MarketBettingType,
+        self.market_time: i64,
+        self.market_time_str: FixedSizeString<24>,
+        self.open_date: i64,
+        self.open_date_str: FixedSizeString<24>,
+        self.suspend_time: Option<i64>,
+        self.suspend_time_str: Option<FixedSizeString<24>>,
+        self.settled_time: Option<i64>,
+        self.settled_time_str: Option<FixedSizeString<24>>,
+        // need getters
+        market_id: MarketID,
+        country_code: FixedSizeString<2>,
+    }*/
 }
 
 #[pymethods]
@@ -213,11 +256,7 @@ pub struct PyMarket {
 }
 
 impl PyMarket {
-    pub fn new_object(
-        item: SourceItem,
-        config: Config,
-        py: Python,
-    ) -> Result<PyObject, DeserErr> {
+    pub fn new_object(item: SourceItem, config: Config, py: Python) -> Result<PyObject, DeserErr> {
         let mut deser = item.deser;
         let mut base = PyMarketBase::new(item.file);
 
@@ -243,7 +282,12 @@ impl PyMarket {
         py: Python,
     ) -> Result<(), serde_json::Error> {
         deser.with_dependent_mut(|_, deser| {
-            PyMarketToken(base, py, config).deserialize(&mut deser.0)
+            PyMarketToken {
+                market: base,
+                py,
+                config,
+            }
+            .deserialize(&mut deser.0)
         })
     }
 }
@@ -305,7 +349,11 @@ impl PyMarket {
     }
 }
 
-struct PyMarketToken<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+struct PyMarketToken<'a, 'py> {
+    market: &'a mut PyMarketBase,
+    config: Config,
+    py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
     type Value = ();
 
@@ -322,7 +370,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
             Mc,
         }
 
-        struct PyMarketOuterVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+        struct PyMarketOuterVisitor<'a, 'py> {
+            market: &'a mut PyMarketBase,
+            config: Config,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketOuterVisitor<'a, 'py> {
             type Value = ();
 
@@ -339,10 +391,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
                         Field::Op => {
                             map.next_value::<IgnoredAny>()?;
                         }
-                        Field::Pt => self.0.publish_time = map.next_value()?,
-                        Field::Mc => map.next_value_seed(PyMarketMcSeq(self.0, self.1, self.2))?,
+                        Field::Pt => self.market.publish_time = map.next_value()?,
+                        Field::Mc => map.next_value_seed(PyMarketMcSeq {
+                            market: self.market,
+                            config: self.config,
+                            py: self.py,
+                        })?,
                         Field::Clk => {
-                            self.0.clk.set_if_ne(map.next_value::<&str>()?);
+                            self.market.clk.set_if_ne(map.next_value::<&str>()?);
                         }
                     }
                 }
@@ -355,13 +411,21 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
         deserializer.deserialize_struct(
             "MarketBook",
             FIELDS,
-            PyMarketOuterVisitor(self.0, self.1, self.2),
+            PyMarketOuterVisitor {
+                market: self.market,
+                config: self.config,
+                py: self.py,
+            },
         )
     }
 }
 
 // Used for serializing in place over the marketChange `mc` array
-struct PyMarketMcSeq<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+struct PyMarketMcSeq<'a, 'py> {
+    market: &'a mut PyMarketBase,
+    config: Config,
+    py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
     type Value = ();
 
@@ -369,7 +433,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct PyMarketMcSeqVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+        struct PyMarketMcSeqVisitor<'a, 'py> {
+            market: &'a mut PyMarketBase,
+            config: Config,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketMcSeqVisitor<'a, 'py> {
             type Value = ();
 
@@ -381,20 +449,44 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                while seq
-                    .next_element_seed(PyMarketMc(self.0, self.1, self.2))?
-                    .is_some()
-                {}
+                #[derive(Deserialize)]
+                struct IDandImg {
+                    img: Option<bool>,
+                }
+
+                while let Some(raw) = seq.next_element::<&RawValue>()? {
+                    let mut deserializer = serde_json::Deserializer::from_str(raw.get());
+                    let idimg: IDandImg = serde_json::from_str(raw.get()).map_err(Error::custom)?;
+
+                    PyMarketMc {
+                        market: self.market,
+                        config: self.config,
+                        py: self.py,
+                        img: idimg.img.unwrap_or(false),
+                    }
+                    .deserialize(&mut deserializer)
+                    .map_err(Error::custom)?;
+                }
+
                 Ok(())
             }
         }
 
-        deserializer.deserialize_seq(PyMarketMcSeqVisitor(self.0, self.1, self.2))
+        deserializer.deserialize_seq(PyMarketMcSeqVisitor {
+            market: self.market,
+            config: self.config,
+            py: self.py,
+        })
     }
 }
 
 // Used for serializing in place over the marketChange `mc` objects
-struct PyMarketMc<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+struct PyMarketMc<'a, 'py> {
+    market: &'a mut PyMarketBase,
+    config: Config,
+    py: Python<'py>,
+    img: bool,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
     type Value = ();
 
@@ -417,7 +509,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
             StreamId,
         }
 
-        struct PyMarketMcVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+        struct PyMarketMcVisitor<'a, 'py> {
+            market: &'a mut PyMarketBase,
+            config: Config,
+            img: bool,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketMcVisitor<'a, 'py> {
             type Value = ();
 
@@ -432,29 +529,37 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Id => {
+                            let mid = map.next_value::<MarketID>()?;
+
                             // Do not currently support files that have multiple markets in them.
                             // There are event level files that betfair provide, which have every
                             // market for an event
                             // with filtering: if a market has already been initted and then
                             // changes then we must have a multi market file.
-                            let is_init = !self.0.market_id.is_empty();
-                            if self.0.market_id.set_if_ne(map.next_value::<&str>()?) && is_init {
+                            let is_init = self.market.market_id != MarketID::default();
+                            if self.market.market_id != mid && is_init {
                                 return Err(Error::custom(
                                     "multiple markets per file is not supported",
                                 ));
+                            } else {
+                                self.market.market_id = mid;
                             }
                         }
-                        Field::MarketDefinition => {
-                            map.next_value_seed(PyMarketDefinition(self.0, self.1, self.2))?
-                        }
-                        Field::Rc => map.next_value_seed(PyRunnerChangeSeq(
-                            &mut self.0.runners,
-                            self.1,
-                            self.2,
-                        ))?,
+                        Field::MarketDefinition => map.next_value_seed(PyMarketDefinition {
+                            market: self.market,
+                            config: self.config,
+                            img: self.img,
+                            py: self.py,
+                        })?,
+                        Field::Rc => map.next_value_seed(PyRunnerChangeSeq {
+                            runners: &mut self.market.runners,
+                            img: self.img,
+                            config: self.config,
+                            py: self.py,
+                        })?,
                         Field::Tv => {
-                            if !self.2.cumulative_runner_tv {
-                                self.0.total_matched += map.next_value::<f64>()?;
+                            if !self.config.cumulative_runner_tv {
+                                self.market.total_matched += map.next_value::<f64>()?;
                             } else {
                                 map.next_value::<IgnoredAny>()?;
                             }
@@ -463,6 +568,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                             map.next_value::<IgnoredAny>()?;
                         }
                         Field::Img => {
+                            // TODO I need to handle this and clear the market
                             map.next_value::<IgnoredAny>()?;
                         }
                         _ => {
@@ -474,12 +580,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
                 // if cumulative_runner_tv is on, then tv shouldnt be sent at a market level and will have
                 // to be derived from the sum of runner tv's. This happens when using the data provided
                 // from betfair historical data service, not saved from the actual stream
-                if self.2.cumulative_runner_tv {
-                    self.0.total_matched = self
-                        .0
+                if self.config.cumulative_runner_tv {
+                    self.market.total_matched = self
+                        .market
                         .runners
                         .iter()
-                        .map(|r| r.borrow(self.1).total_matched)
+                        .map(|r| r.borrow(self.py).total_matched)
                         .sum();
                 }
 
@@ -491,13 +597,23 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'a, 'py> {
         deserializer.deserialize_struct(
             "MarketChange",
             FIELDS,
-            PyMarketMcVisitor(self.0, self.1, self.2),
+            PyMarketMcVisitor {
+                market: self.market,
+                config: self.config,
+                img: self.img,
+                py: self.py,
+            },
         )
     }
 }
 
 // Used for serializing in place over the mc marketDefinition object
-struct PyMarketDefinition<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+struct PyMarketDefinition<'a, 'py> {
+    market: &'a mut PyMarketBase,
+    config: Config,
+    img: bool,
+    py: Python<'py>,
+}
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
     type Value = ();
 
@@ -547,7 +663,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
             Version,
         }
 
-        struct PyMarketDefinitionVisitor<'a, 'py>(&'a mut PyMarketBase, Python<'py>, Config);
+        struct PyMarketDefinitionVisitor<'a, 'py> {
+            market: &'a mut PyMarketBase,
+            config: Config,
+            img: bool,
+            py: Python<'py>,
+        }
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketDefinitionVisitor<'a, 'py> {
             type Value = ();
 
@@ -561,111 +682,120 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
             {
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::BspMarket => self.0.bsp_market = map.next_value()?,
+                        Field::BspMarket => self.market.bsp_market = map.next_value()?,
                         Field::TurnInPlayEnabled => {
-                            self.0.turn_in_play_enabled = map.next_value()?
+                            self.market.turn_in_play_enabled = map.next_value()?
                         }
-                        Field::InPlay => self.0.in_play = map.next_value()?,
+                        Field::InPlay => self.market.in_play = map.next_value()?,
                         Field::PersistenceEnabled => {
-                            self.0.persistence_enabled = map.next_value()?
+                            self.market.persistence_enabled = map.next_value()?
                         }
-                        Field::BspReconciled => self.0.bsp_reconciled = map.next_value()?,
-                        Field::Complete => self.0.complete = map.next_value()?,
-                        Field::CrossMatching => self.0.cross_matching = map.next_value()?,
-                        Field::RunnersVoidable => self.0.runners_voidable = map.next_value()?,
-                        Field::DiscountAllowed => self.0.discount_allowed = map.next_value()?,
+                        Field::BspReconciled => self.market.bsp_reconciled = map.next_value()?,
+                        Field::Complete => self.market.complete = map.next_value()?,
+                        Field::CrossMatching => self.market.cross_matching = map.next_value()?,
+                        Field::RunnersVoidable => {
+                            self.market.runners_voidable = map.next_value()?
+                        }
+                        Field::DiscountAllowed => {
+                            self.market.discount_allowed = map.next_value()?
+                        }
                         Field::Timezone => {
-                            self.0.timezone.set_if_ne(map.next_value::<&str>()?);
+                            self.market.timezone.set_if_ne(map.next_value::<&str>()?);
                         }
                         Field::Name => {
-                            self.0.market_name.set_if_ne(map.next_value::<Cow<str>>()?);
+                            self.market
+                                .market_name
+                                .set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::EventName => {
-                            self.0.event_name.set_if_ne(map.next_value::<Cow<str>>()?);
+                            self.market
+                                .event_name
+                                .set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::CountryCode => {
-                            self.0.country_code.set_if_ne(map.next_value::<&str>()?);
+                            self.market.country_code = map.next_value::<FixedSizeString<2>>()?;
                         }
                         Field::Venue => {
-                            self.0.venue.set_if_ne(map.next_value::<Cow<str>>()?);
+                            self.market.venue.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
-                        Field::Status => self.0.status = map.next_value()?,
+                        Field::Status => self.market.status = map.next_value()?,
                         Field::MarketBaseRate => {
-                            self.0.market_base_rate = map.next_value::<f32>()? as u8
+                            self.market.market_base_rate = map.next_value::<f32>()? as u8
                         } // TODO: why is this needed
                         Field::NumberOfWinners => {
-                            self.0.number_of_winners = map.next_value::<f32>()? as u8
+                            self.market.number_of_winners = map.next_value::<f32>()? as u8
                         } // TODO: why is this needed
                         Field::NumberOfActiveRunners => {
-                            self.0.number_of_active_runners = map.next_value()?
+                            self.market.number_of_active_runners = map.next_value()?
                         }
-                        Field::BetDelay => self.0.bet_delay = map.next_value()?,
+                        Field::BetDelay => self.market.bet_delay = map.next_value()?,
                         Field::EventId => {
-                            self.0.event_id = map
+                            self.market.event_id = map
                                 .next_value::<&str>()?
                                 .parse()
                                 .map_err(de::Error::custom)?;
                         }
                         Field::EventTypeId => {
-                            self.0.event_type_id = map
+                            self.market.event_type_id = map
                                 .next_value::<&str>()?
                                 .parse()
                                 .map_err(de::Error::custom)?;
                         }
-                        Field::Version => self.0.version = map.next_value()?,
-                        Field::Runners => map.next_value_seed(PyRunnerDefSeq(
-                            &mut self.0.runners,
-                            self.1,
-                            self.2,
-                        ))?,
+                        Field::Version => self.market.version = map.next_value()?,
+                        Field::Runners => map.next_value_seed(PyRunnerDefSeq {
+                            runners: &mut self.market.runners,
+                            config: self.config,
+                            img: self.img,
+                            py: self.py,
+                        })?,
                         Field::MarketType => {
-                            self.0.market_type.set_if_ne(map.next_value::<&str>()?);
+                            self.market.market_type.set_if_ne(map.next_value::<&str>()?);
                         }
-                        Field::BettingType => self.0.betting_type = map.next_value()?,
+                        Field::BettingType => self.market.betting_type = map.next_value()?,
                         Field::EachWayDivisor => {
-                            self.0.each_way_divisor = Some(map.next_value::<f64>()?)
+                            self.market.each_way_divisor = Some(map.next_value::<f64>()?)
                         }
                         Field::MarketTime => {
-                            let s = map.next_value()?;
-                            if self.0.market_time_str.set_if_ne(s) {
-                                let ts = chrono::DateTime::parse_from_rfc3339(s)
+                            let s = map.next_value::<FixedSizeString<24>>()?;
+                            if self.market.market_time_str != s {
+                                let ts = chrono::DateTime::parse_from_rfc3339(s.as_str())
                                     .map_err(de::Error::custom)?
                                     .timestamp_millis();
 
-                                self.0.market_time = ts;
+                                self.market.market_time = ts;
                             }
                         }
                         Field::SuspendTime => {
-                            let s = map.next_value()?;
-                            if self.0.suspend_time_str.set_if_ne(s) {
-                                let ts = chrono::DateTime::parse_from_rfc3339(s)
+                            let s = map.next_value::<FixedSizeString<24>>()?;
+                            if self.market.suspend_time_str.contains(&s) {
+                                let ts = chrono::DateTime::parse_from_rfc3339(s.as_str())
                                     .map_err(de::Error::custom)?
                                     .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                // self.0.suspend_time = Some(d.into_py(self.1));
-                                self.0.suspend_time = Some(ts);
+                                // self.market.suspend_time = Some(d.into_py(self.1));
+                                self.market.suspend_time = Some(ts);
                             }
                         }
                         Field::SettledTime => {
-                            let s = map.next_value()?;
-                            if self.0.settled_time_str.set_if_ne(s) {
-                                let ts = chrono::DateTime::parse_from_rfc3339(s)
+                            let s = map.next_value::<FixedSizeString<24>>()?;
+                            if self.market.settled_time_str.contains(&s) {
+                                let ts = chrono::DateTime::parse_from_rfc3339(s.as_str())
                                     .map_err(de::Error::custom)?
                                     .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                // self.0.settled_time = Some(d.into_py(self.1));
-                                self.0.settled_time = Some(ts);
+                                // self.market.settled_time = Some(d.into_py(self.1));
+                                self.market.settled_time = Some(ts);
                             }
                         }
                         Field::OpenDate => {
-                            let s = map.next_value()?;
-                            if self.0.open_date_str.set_if_ne(s) {
-                                let ts = chrono::DateTime::parse_from_rfc3339(s)
+                            let s = map.next_value::<FixedSizeString<24>>()?;
+                            if self.market.open_date_str != s {
+                                let ts = chrono::DateTime::parse_from_rfc3339(s.as_str())
                                     .map_err(de::Error::custom)?
                                     .timestamp_millis();
                                 // let d = PyDateTime::from_timestamp(self.1, ts as f64, None).unwrap();
-                                // self.0.open_date = Some(d.into_py(self.1));
-                                self.0.open_date = ts;
+                                // self.market.open_date = Some(d.into_py(self.1));
+                                self.market.open_date = ts;
                             }
                         }
                         Field::Regulators => {
@@ -745,7 +875,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
         deserializer.deserialize_struct(
             "MarketDefinition",
             FIELDS,
-            PyMarketDefinitionVisitor(self.0, self.1, self.2),
+            PyMarketDefinitionVisitor {
+                market: self.market,
+                config: self.config,
+                img: self.img,
+                py: self.py,
+            },
         )
     }
 }
