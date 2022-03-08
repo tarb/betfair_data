@@ -1,6 +1,6 @@
 [package]
 name = "betfair_data"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [lib]
@@ -23,7 +23,7 @@ chrono = "0.4.19"
 simdutf8 = { version = "0.1", features = ["std", "aarch64_neon"] }
 rayon = "1.5"
 flate2 = "1.0"
-rayon-seq-iter = { git = "https://github.com/nwtgck/rayon-seq-iter" }
+# rayon-seq-iter = { git = "https://github.com/nwtgck/rayon-seq-iter" }
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rayon", "nightly"]}
 
 ouroboros = "0.14.2"

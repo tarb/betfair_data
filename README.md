@@ -2,7 +2,9 @@
 
 Betfair Data is a very fast Betfair historical data file parsing library for python. It currently supports tar archives containing BZ2 compressed NLJSON files (the standard format provided by [Betfair's historic data portal](https://historicdata.betfair.com/#/home)).
 
-The library is written in Rust and uses advanced performance enhancing techniques, like in place json deserialization and decompressing Bz2 encoded data on worker threads and is ideal for parsing large quantities of historic data that could otherwise take hours or days to parse.
+The library is written in Rust and uses advanced performance enhancing techniques, like in place json deserialization and decompressing Bz2/Gzip encoded data on worker threads and is ideal for parsing large quantities of historic data that could otherwise take hours or days to parse.
+
+This library is a work in progress and is still subject to breaking changes.
 
 ## Installation
 
@@ -38,80 +40,76 @@ for market in betfair_data.TarBz2(paths).mutable():
 print(f"Markets {market_count} Updates {update_count}")
 
 ```
-## Types
-IDE's should automatically detect the types and provide checking and auto complete. See the [pyi stub file](betfair_data.pyi) for a comprehensive view of the types and method available.
 
-<br />
+## Loading Files
 
-## Benchmarks
+You can read in self recorded stream files. Make sure to set cumulative_runner_tv to False for self recorded files to make sure you get the correct runner and market volumes.
+```python
+import betfair_data
+import glob
 
-| Betfair Data (this)  | [Betfairlightweight](https://github.com/liampauling/betfair/) |
-| ---------------------|---------------------|
-| 3m 37sec             | 1hour 1min 45sec    |
-| ~101 markets/sec     | ~6 markets/sec      |
-| ~768,000 updates/sec | ~45,500 updates/sec |
-
-Benchmarks were run against 3 months of Australian racing markets comprising roughly 22,000 markets. Benchmarks were run on a M1 Macbook Pro with 32GB ram.
-
-These results should only be used as a rough comparison, different machines, different sports and even different months can effect the performance and overall markets/updates per second.
-
-No disrespect is intended towards betfairlightweight, which remains an amazing library and a top choice for working with the Betfair API. Every effort was made to have its benchmark below run as fast as possible, and any improvements are welcome.
-
-<br>
-
-Betfair_Data benchmark show in the example above.
-<details><summary>Betfairlightweight Benchmark</summary>
+paths = glob.glob("data/*.gz")
+files = betfair_data.Files(paths, cumulative_runner_tv=False)
+```
+Or you can read official Betfair Tar archives with bz2 encoded market files.
 
 ```python
-from typing import Sequence 
+import betfair_data
+import glob
 
-import unittest.mock
-import tarfile
-import bz2
-import betfairlightweight
-
-trading = betfairlightweight.APIClient("username", "password", "appkey")
-listener = betfairlightweight.StreamListener(
-    max_latency=None, lightweight=True, update_clk=False, output_queue=None, cumulative_runner_tv=True, calculate_market_tv=True
-)
-
-paths = [ 
-    "data/2021_10_OctRacingAUPro.tar",
-    "data/2021_11_NovRacingAUPro.tar",
-    "data/2021_12_DecRacingAUPro.tar"
-]
-
-def load_tar(file_paths: Sequence[str]):
-    for file_path in file_paths:
-        with tarfile.TarFile(file_path) as archive:
-            for file in archive:
-                yield bz2.open(archive.extractfile(file))
-    return None
-
-market_count = 0
-update_count = 0
-
-for file_obj in load_tar(paths):
-    with unittest.mock.patch("builtins.open", lambda f, _: f):  
-        stream = trading.streaming.create_historical_generator_stream(
-            file_path=file_obj,
-            listener=listener,
-        )
-        gen = stream.get_generator()
-
-        market_count += 1
-        for market_books in gen():
-            for market_book in market_books:
-                update_count += 1
-
-    print(f"Markets {market_count} Updates {update_count}", end='\r')
-print(f"Markets {market_count} Updates {update_count}")
-
+paths = glob.glob("data/*.tar")
+files = betfair_data.TarBz2(paths, cumulative_runner_tv=True)
 ```
-</details>
 
-<br>
-<br>
+Or load the file through any other means and pass the bytes and name into the object constructors.
+
+```python
+# generator to read in files
+def load_files(paths: str):
+    for path in glob.glob(paths, recursive=True):
+        with open(path, "rb") as file:
+            yield (path, file.read())
+
+# iterate over the files and convert into bflw iterator
+for name, bs in load_files("markets/*.json"):
+    for market_books in bflw.BflwIter(name, bs):
+        for market_book in market_books:
+            # do stuff
+            pass
+```
+
+## Object Types
+
+You can use differnt styles of objects, with pros or depending on your needs
+
+Mutable objects, generally the fastest, but can be hard to use. If you find yourself calling market.copy a lot, you may find immutable faster
+``` python
+# where files is loaded from a TarBz2 or Files source like above
+mut_iter = files.mutable()
+for market in mut_iter: # different markets per file
+    while market.update(): # update the market in place
+        pass
+```
+
+Immutable objects, slightly slower but can be easier to use. Equilivent of calling market.copy() on every update but faster, as only objects that change make new copies. ```NOT YET FINISHED```
+``` python
+immut_iter = files.immutable()
+for market_iter in immut_iter: # different files
+    for market in market_iter: # each update of a market/file
+        pass
+```
+
+Betfairlightweight compatible version, drop in replacement for bflw objects. 
+```python
+bflw_iter = files.bflw()
+for file in bflw_iter: # different files
+    for market_books in file: # different books per update
+        for market in market_books: # each update of a market
+            pass
+```
+
+## Types
+IDE's should automatically detect the types and provide checking and auto complete. See the [pyi stub file](betfair_data.pyi) for a comprehensive view of the types and method available.
 
 
 ## Logging

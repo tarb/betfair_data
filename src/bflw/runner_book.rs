@@ -6,7 +6,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
 use super::market_definition_runner::MarketDefRunnerUpdate;
-use super::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
+use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
 use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
 use crate::bflw::float_str::FloatStr;
 use crate::bflw::RoundToCents;

@@ -5,7 +5,6 @@ pub mod market_definition;
 pub mod market_definition_runner;
 pub mod runner_book;
 mod float_str;
-mod runner_book_ex;
 mod runner_book_sp;
 
 

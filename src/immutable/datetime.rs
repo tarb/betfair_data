@@ -80,7 +80,7 @@ impl PartialEq<DateTimeString> for &str {
 }
 
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct DateTime(u64);
 
 impl DateTime {

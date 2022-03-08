@@ -397,8 +397,8 @@ mod tests {
         ];
 
         let ps10 = ImmutablePriceSizeLayLadder(&ps9)
-        .deserialize(&mut deser)
-        .expect("failed to deserialize");
+            .deserialize(&mut deser)
+            .expect("failed to deserialize");
         let ans10 = vec![
             PriceSize::new(4.0, 5.0),
             PriceSize::new(3.1, 3.0),
@@ -434,6 +434,5 @@ mod tests {
         assert_eq!(ps8, ans8);
         assert_eq!(ps9, ans9);
         assert_eq!(ps10, ans10);
-
     }
 }

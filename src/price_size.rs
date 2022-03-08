@@ -71,6 +71,15 @@ impl From<F64OrStr> for f64 {
     }
 }
 
+impl std::ops::Deref for F64OrStr {
+    type Target = f64;
+
+    #[inline]
+    fn deref(&self) -> &f64 {
+        &self.0 
+    }
+}
+
 impl<'de> Deserialize<'de> for F64OrStr {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

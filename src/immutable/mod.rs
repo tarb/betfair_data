@@ -6,3 +6,5 @@ pub mod market;
 pub mod runner;
 pub mod config;
 pub mod datetime;
+
+mod definition;

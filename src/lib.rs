@@ -8,7 +8,6 @@
     option_result_contains,
     is_some_with,
     min_specialization,
-
 )]
 
 mod bflw;
@@ -56,7 +55,6 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyRunner>()?;
     m.add_class::<PyRunnerBookEX>()?;
     m.add_class::<PyRunnerBookSP>()?;
-
 
     let bflw = PyModule::new(py, "bflw")?;
     bflw.add_class::<BflwIter>()?;
