@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use pyo3::prelude::*;
+use std::sync::Arc;
 
 use crate::immutable::container::SyncObj;
 use crate::price_size::PriceSize;
@@ -23,15 +23,18 @@ impl RunnerBookEX {
         Py::new(
             py,
             Self {
-                available_to_back: update
-                    .available_to_back
-                    .map_or_else(|| self.available_to_back.clone(), |ps| SyncObj::new(Arc::new(ps))),
-                available_to_lay: update
-                    .available_to_lay
-                    .map_or_else(|| self.available_to_lay.clone(), |ps| SyncObj::new(Arc::new(ps))),
-                traded_volume: update
-                    .traded_volume
-                    .map_or_else(|| self.traded_volume.clone(), |ps| SyncObj::new(Arc::new(ps))),
+                available_to_back: update.available_to_back.map_or_else(
+                    || self.available_to_back.clone(),
+                    |ps| SyncObj::new(Arc::new(ps)),
+                ),
+                available_to_lay: update.available_to_lay.map_or_else(
+                    || self.available_to_lay.clone(),
+                    |ps| SyncObj::new(Arc::new(ps)),
+                ),
+                traded_volume: update.traded_volume.map_or_else(
+                    || self.traded_volume.clone(),
+                    |ps| SyncObj::new(Arc::new(ps)),
+                ),
             },
         )
         .unwrap()

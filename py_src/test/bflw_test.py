@@ -23,7 +23,7 @@ paths = glob("data/stream/*.gz")
 #     "data/2021_11_NovRacingAUPro.tar",
 # ]
 # find way to garentee order - this is gross
-bfd_source = betfair_data.Files(paths, cumulative_runner_tv=True).bflw()
+bfd_source = betfair_data.Files(paths, cumulative_runner_tv=False).bflw()
 
 def bflw_source(file_paths: Sequence[str]):
     trading = betfairlightweight.APIClient("username", "password", "appkey")

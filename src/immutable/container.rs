@@ -3,11 +3,11 @@ use pyo3::{
     types::{PyList, PyUnicode},
 };
 
-use std::{lazy::OnceCell, path::PathBuf};
 use std::sync::Arc;
+use std::{lazy::OnceCell, path::PathBuf};
 
-use crate::{price_size::PriceSize, strings::FixedSizeString};
 use super::datetime::DateTimeString;
+use crate::{price_size::PriceSize, strings::FixedSizeString};
 
 pub trait PyRep {
     fn py_rep(&self, py: Python) -> PyObject;
@@ -43,19 +43,20 @@ impl PyRep for Vec<String> {
     }
 }
 
-
 #[derive(Debug)]
 pub struct SyncObj<T> {
     value: T,
     py: OnceCell<PyObject>,
 }
 
+unsafe impl<T: Sync> Sync for SyncObj<T> {}
+
 impl<T> std::ops::Deref for SyncObj<T> {
     type Target = T;
 
     #[inline]
     fn deref(&self) -> &T {
-        &self.value 
+        &self.value
     }
 }
 
@@ -133,7 +134,6 @@ impl<T: AsRef<str>> AsRef<str> for SyncObj<T> {
         self.value.as_ref()
     }
 }
-
 
 impl PartialEq<SyncObj<String>> for &str {
     fn eq(&self, so: &SyncObj<String>) -> bool {

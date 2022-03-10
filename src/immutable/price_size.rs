@@ -5,12 +5,12 @@ use std::fmt;
 
 use crate::price_size::PriceSize;
 
-pub struct ImmutablePriceSizeBackLadder<'a>(pub &'a [PriceSize]);
+pub struct ImmutablePriceSizeBackLadder<'a>(pub Option<&'a [PriceSize]>);
 impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeBackLadder<'a> {
     type Value = Vec<PriceSize>;
 
     fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
-        struct PSVisitor<'a>(&'a [PriceSize]);
+        struct PSVisitor<'a>(Option<&'a [PriceSize]>);
         impl<'de, 'a> Visitor<'de> for PSVisitor<'a> {
             type Value = Vec<PriceSize>;
 
@@ -22,8 +22,14 @@ impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeBackLadder<'a> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                let mut v = Vec::with_capacity(std::cmp::min(self.0.len() + 10, 350));
-                self.0.clone_into(&mut v);
+                let mut v = match self.0 {
+                    Some(ps) => {
+                        let mut v = Vec::with_capacity(std::cmp::min(ps.len() + 5, 350));
+                        ps.clone_into(&mut v);
+                        v
+                    }
+                    None => Vec::with_capacity(10),
+                };
 
                 while let Some(ps1) = seq.next_element::<PriceSize>()? {
                     let cmp_fn = |ps2: &PriceSize| {
@@ -62,12 +68,12 @@ impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeBackLadder<'a> {
     }
 }
 
-pub struct ImmutablePriceSizeLayLadder<'a>(pub &'a [PriceSize]);
+pub struct ImmutablePriceSizeLayLadder<'a>(pub Option<&'a [PriceSize]>);
 impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeLayLadder<'a> {
     type Value = Vec<PriceSize>;
 
     fn deserialize<D: Deserializer<'de>>(self, deserializer: D) -> Result<Self::Value, D::Error> {
-        struct PSVisitor<'a>(&'a [PriceSize]);
+        struct PSVisitor<'a>(Option<&'a [PriceSize]>);
         impl<'de, 'a> Visitor<'de> for PSVisitor<'a> {
             type Value = Vec<PriceSize>;
 
@@ -79,10 +85,16 @@ impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeLayLadder<'a> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-                // grow an empty vec
-                let mut v = Vec::with_capacity(std::cmp::min(self.0.len() + 10, 350));
-                self.0.clone_into(&mut v);
 
+                let mut v = match self.0 {
+                    Some(ps) => {
+                        let mut v = Vec::with_capacity(std::cmp::min(ps.len() + 5, 350));
+                        ps.clone_into(&mut v);
+                        v
+                    }
+                    None => Vec::with_capacity(10),
+                };
+                
                 while let Some(ps1) = seq.next_element::<PriceSize>()? {
                     let cmp_fn = |ps2: &PriceSize| {
                         if ps1.price < ps2.price {
@@ -141,7 +153,7 @@ mod tests {
         let ps1: Vec<PriceSize> = Vec::new();
         let ans1: Vec<PriceSize> = Vec::new();
 
-        let ps2 = ImmutablePriceSizeBackLadder(&ps1)
+        let ps2 = ImmutablePriceSizeBackLadder(Some(&ps1))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans2 = vec![
@@ -152,7 +164,7 @@ mod tests {
             PriceSize::new(6.0, 5.0),
         ];
 
-        let ps3 = ImmutablePriceSizeBackLadder(&ps2)
+        let ps3 = ImmutablePriceSizeBackLadder(Some(&ps2))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans3 = vec![
@@ -168,7 +180,7 @@ mod tests {
             PriceSize::new(7.0, 4.0),
         ];
 
-        let ps4 = ImmutablePriceSizeBackLadder(&ps3)
+        let ps4 = ImmutablePriceSizeBackLadder(Some(&ps3))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans4 = vec![
@@ -180,7 +192,7 @@ mod tests {
             PriceSize::new(6.0, 5.0),
         ];
 
-        let ps5 = ImmutablePriceSizeBackLadder(&ps4)
+        let ps5 = ImmutablePriceSizeBackLadder(Some(&ps4))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans5 = vec![
@@ -191,12 +203,12 @@ mod tests {
             PriceSize::new(6.0, 5.0),
         ];
 
-        let ps6 = ImmutablePriceSizeBackLadder(&ps5)
+        let ps6 = ImmutablePriceSizeBackLadder(Some(&ps5))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans6 = Vec::new();
 
-        let ps7 = ImmutablePriceSizeBackLadder(&ps6)
+        let ps7 = ImmutablePriceSizeBackLadder(Some(&ps6))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans7 = vec![
@@ -208,7 +220,7 @@ mod tests {
             PriceSize::new(1.6, 1.0),
         ];
 
-        let ps8 = ImmutablePriceSizeBackLadder(&ps7)
+        let ps8 = ImmutablePriceSizeBackLadder(Some(&ps7))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans8 = vec![
@@ -226,7 +238,7 @@ mod tests {
             PriceSize::new(2.2, 2.0),
         ];
 
-        let ps9 = ImmutablePriceSizeBackLadder(&ps8)
+        let ps9 = ImmutablePriceSizeBackLadder(Some(&ps8))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans9 = vec![
@@ -284,7 +296,7 @@ mod tests {
         let ps1: Vec<PriceSize> = Vec::new();
         let ans1: Vec<PriceSize> = Vec::new();
 
-        let ps2 = ImmutablePriceSizeLayLadder(&ps1)
+        let ps2 = ImmutablePriceSizeLayLadder(Some(&ps1))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans2 = vec![
@@ -295,7 +307,7 @@ mod tests {
             PriceSize::new(2.0, 5.0),
         ];
 
-        let ps3 = ImmutablePriceSizeLayLadder(&ps2)
+        let ps3 = ImmutablePriceSizeLayLadder(Some(&ps2))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans3 = vec![
@@ -311,7 +323,7 @@ mod tests {
             PriceSize::new(1.25, 4.0),
         ];
 
-        let ps4 = ImmutablePriceSizeLayLadder(&ps3)
+        let ps4 = ImmutablePriceSizeLayLadder(Some(&ps3))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans4 = vec![
@@ -323,7 +335,7 @@ mod tests {
             PriceSize::new(2.0, 5.0),
         ];
 
-        let ps5 = ImmutablePriceSizeLayLadder(&ps4)
+        let ps5 = ImmutablePriceSizeLayLadder(Some(&ps4))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans5 = vec![
@@ -334,12 +346,12 @@ mod tests {
             PriceSize::new(2.0, 1.0),
         ];
 
-        let ps6 = ImmutablePriceSizeLayLadder(&ps5)
+        let ps6 = ImmutablePriceSizeLayLadder(Some(&ps5))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans6 = Vec::new();
 
-        let ps7 = ImmutablePriceSizeLayLadder(&ps6)
+        let ps7 = ImmutablePriceSizeLayLadder(Some(&ps6))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans7 = vec![
@@ -351,7 +363,7 @@ mod tests {
             PriceSize::new(1.1, 6.0),
         ];
 
-        let ps8 = ImmutablePriceSizeLayLadder(&ps7)
+        let ps8 = ImmutablePriceSizeLayLadder(Some(&ps7))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans8 = vec![
@@ -369,7 +381,7 @@ mod tests {
             PriceSize::new(1.1, 6.0),
         ];
 
-        let ps9 = ImmutablePriceSizeLayLadder(&ps8)
+        let ps9 = ImmutablePriceSizeLayLadder(Some(&ps8))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans9 = vec![
@@ -396,7 +408,7 @@ mod tests {
             PriceSize::new(1.1, 6.0),
         ];
 
-        let ps10 = ImmutablePriceSizeLayLadder(&ps9)
+        let ps10 = ImmutablePriceSizeLayLadder(Some(&ps9))
             .deserialize(&mut deser)
             .expect("failed to deserialize");
         let ans10 = vec![

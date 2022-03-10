@@ -1,7 +1,7 @@
 use pyo3::{types::PyTuple, IntoPy, Py, PyAny, PyObject, PyResult, Python, ToPyObject};
 use std::{lazy::SyncOnceCell, ops::Deref};
 
-use crate::{immutable::container::{PyRep}, strings::FixedSizeString};
+use crate::{immutable::container::PyRep, strings::FixedSizeString};
 
 static DATE_TIME_CLASS: SyncOnceCell<Py<PyAny>> = SyncOnceCell::new();
 
@@ -78,7 +78,6 @@ impl PartialEq<DateTimeString> for &str {
         self == &s.str
     }
 }
-
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct DateTime(u64);

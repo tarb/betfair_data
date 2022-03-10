@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use crate::bflw::adapter::BflwAdapter;
 use crate::deser::DeserializerWithData;
 use crate::errors::IOErr;
+use crate::immutable::adapter::ImmutAdapter;
 use crate::market_source::{MarketSource, SourceConfig, SourceItem};
 use crate::mutable::adapter::MutAdapter;
 
@@ -48,6 +49,16 @@ impl Files {
 
         match source {
             Some(s) => Ok(MutAdapter::new(Box::new(s), stable_runner_index)),
+            None => Err(PyRuntimeError::new_err("empty source")),
+        }
+    }
+
+    #[pyo3(name = "immut")]
+    fn immut_adapter(&mut self) -> PyResult<ImmutAdapter> {
+        let source = self.source.take();
+
+        match source {
+            Some(s) => Ok(ImmutAdapter::new(Box::new(s))),
             None => Err(PyRuntimeError::new_err("empty source")),
         }
     }

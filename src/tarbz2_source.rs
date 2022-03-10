@@ -1,3 +1,4 @@
+use bzip2_rs::decoder::ParallelDecoderReader;
 use crossbeam_channel::{bounded, Receiver};
 use ouroboros::self_referencing;
 use pyo3::exceptions;
@@ -10,12 +11,12 @@ use std::io::Read;
 use std::path::PathBuf;
 use tar::Archive;
 use tar::Entries;
-use bzip2_rs::decoder::ParallelDecoderReader;
 
 use crate::bflw::adapter::BflwAdapter;
 use crate::deser::DeserializerWithData;
-use crate::market_source::{MarketSource, SourceConfig, SourceItem};
 use crate::errors::IOErr;
+use crate::immutable::adapter::ImmutAdapter;
+use crate::market_source::{MarketSource, SourceConfig, SourceItem};
 use crate::mutable::adapter::MutAdapter;
 
 #[pyclass]
@@ -27,10 +28,7 @@ pub struct TarBz2 {
 impl TarBz2 {
     #[new]
     #[args(cumulative_runner_tv = "true")]
-    fn __new__(
-        paths: &PySequence,
-        cumulative_runner_tv: bool,
-    ) -> PyResult<Self> {
+    fn __new__(paths: &PySequence, cumulative_runner_tv: bool) -> PyResult<Self> {
         let config = SourceConfig {
             cumulative_runner_tv,
         };
@@ -53,20 +51,30 @@ impl TarBz2 {
     #[args(stable_runner_index = "true")]
     fn mut_market_adapter(&mut self, stable_runner_index: bool) -> PyResult<MutAdapter> {
         let source = self.source.take();
-        
+
         match source {
             Some(s) => Ok(MutAdapter::new(Box::new(s), stable_runner_index)),
-            None => Err(PyRuntimeError::new_err("empty source"))
+            None => Err(PyRuntimeError::new_err("empty source")),
+        }
+    }
+
+    #[pyo3(name = "immut")]
+    fn immut_adapter(&mut self) -> PyResult<ImmutAdapter> {
+        let source = self.source.take();
+
+        match source {
+            Some(s) => Ok(ImmutAdapter::new(Box::new(s))),
+            None => Err(PyRuntimeError::new_err("empty source")),
         }
     }
 
     #[pyo3(name = "bflw")]
     fn bflw_adapter(&mut self) -> PyResult<BflwAdapter> {
         let source = self.source.take();
-        
+
         match source {
             Some(s) => Ok(BflwAdapter::new(Box::new(s))),
-            None => Err(PyRuntimeError::new_err("empty source"))
+            None => Err(PyRuntimeError::new_err("empty source")),
         }
     }
 }
@@ -124,7 +132,10 @@ impl TarBzSource {
                 .try_for_each(|r: Result<SourceItem, IOErr>| data_send.send(r));
         });
 
-        Ok(Self { chan: data_recv, config })
+        Ok(Self {
+            chan: data_recv,
+            config,
+        })
     }
 }
 

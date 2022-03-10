@@ -35,12 +35,14 @@ impl RunnerBookSP {
                 actual_sp: update.actual_sp.or(self.actual_sp),
                 far_price: update.far_price.or(self.far_price),
                 near_price: update.near_price.or(self.near_price),
-                back_stake_taken: update
-                    .back_stake_taken
-                    .map_or_else(|| self.back_stake_taken.clone(), |ps| SyncObj::new(Arc::new(ps))),
-                lay_liability_taken: update
-                    .lay_liability_taken
-                    .map_or_else(|| self.lay_liability_taken.clone(), |ps| SyncObj::new(Arc::new(ps))),
+                back_stake_taken: update.back_stake_taken.map_or_else(
+                    || self.back_stake_taken.clone(),
+                    |ps| SyncObj::new(Arc::new(ps)),
+                ),
+                lay_liability_taken: update.lay_liability_taken.map_or_else(
+                    || self.lay_liability_taken.clone(),
+                    |ps| SyncObj::new(Arc::new(ps)),
+                ),
             },
         )
         .unwrap()

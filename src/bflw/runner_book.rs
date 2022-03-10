@@ -6,15 +6,15 @@ use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
 use super::market_definition_runner::MarketDefRunnerUpdate;
-use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
 use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
 use crate::bflw::float_str::FloatStr;
 use crate::bflw::RoundToCents;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::container::{PyRep, SyncObj};
-use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
 use crate::immutable::datetime::DateTimeString;
+use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
+use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
 use crate::market_source::SourceConfig;
 use crate::price_size::{F64OrStr, PriceSize};
 
@@ -312,21 +312,21 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         }
                         Field::Atb => {
                             let ex = self.runner.ex.borrow(self.py);
-                            atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
+                            atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(Some(
                                 &ex.available_to_back,
-                            ))?);
+                            )))?);
                         }
                         Field::Atl => {
                             let ex = self.runner.ex.borrow(self.py);
-                            atl = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(
+                            atl = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(Some(
                                 &ex.available_to_lay,
-                            ))?);
+                            )))?);
                         }
                         Field::Trd => {
                             let ex = self.runner.ex.borrow(self.py);
-                            let l = map.next_value_seed(ImmutablePriceSizeBackLadder(
+                            let l = map.next_value_seed(ImmutablePriceSizeBackLadder(Some(
                                 &ex.traded_volume,
-                            ))?;
+                            )))?;
 
                             if self.config.cumulative_runner_tv {
                                 tv = Some(l.iter().map(|ps| ps.size).sum::<f64>().round_cent());
@@ -336,15 +336,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                         }
                         Field::Spb => {
                             let sp = self.runner.sp.borrow(self.py);
-                            spl = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(
+                            spl = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(Some(
                                 &sp.lay_liability_taken,
-                            ))?);
+                            )))?);
                         }
                         Field::Spl => {
                             let sp = self.runner.sp.borrow(self.py);
-                            spb = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(
+                            spb = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(Some(
                                 &sp.back_stake_taken,
-                            ))?);
+                            )))?);
                         }
                         Field::Spn => {
                             spn = Some(map.next_value::<FloatStr>()?);

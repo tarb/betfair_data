@@ -1,12 +1,12 @@
 from typing import Iterator, List, Sequence, Optional
+from datetime import datetime
+
 from betfair_data import bflw
 
 class MarketImage():
     """
     A class representing a Betfair Market.
     """
-    source: str
-    file: str
     market_id: str
     """Market Id - the id of the market"""
     bet_delay: int
@@ -42,23 +42,23 @@ class MarketImage():
     in_play: bool
     market_base_rate: int
     market_name: Optional[str]
-    market_time: int
+    market_time: datetime
     market_type: str
     number_of_active_runners: int
     number_of_winners: int
-    open_date: int
+    open_date: datetime
     persistence_enabled: bool
-    publish_time: int
+    publish_time: datetime
     """Publish Time (in millis since epoch) that the changes were generated"""
     runners_voidable: bool
     runners: List[Runner]   
-    settled_time: Optional[int]
+    settled_time: Optional[datetime]
     status: str
     """The markets current status, value is one of ["INACTIVE", "OPEN", "SUSPENDED", "CLOSED"]
         >>> market.status
         'CLOSED'
     """
-    suspend_time: Optional[int]
+    suspend_time: Optional[datetime]
     timezone: str
     total_matched: float
     """The total amount matched across the market. This value is truncated at 2dp (or null if un-changed)
@@ -128,17 +128,22 @@ class PriceSize():
 # sources
 class MutableAdapter(Iterator[Market]): ...
 
+class ImmutAdapter(Iterator[ImmutIter]): ...
+class ImmutIter(Iterator[MarketImage]):
+    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True) -> None: ...
+    file_name: str
+
 class TarBz2():
     """"""
     def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
-
     def mutable(self, stable_runner_index = True) -> MutableAdapter: ...
+    def immut(self, stable_runner_index = True) -> ImmutAdapter: ...
     def bflw(self) -> bflw.BflwAdapter: ...
 
 
 class Files():
     """"""
     def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
-
     def mutable(self, stable_runner_index = True) -> MutableAdapter: ...
+    def immut(self, stable_runner_index = True) -> ImmutAdapter: ...
     def bflw(self) -> bflw.BflwAdapter: ...
