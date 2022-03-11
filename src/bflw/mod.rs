@@ -1,12 +1,11 @@
 pub mod adapter;
-pub mod iter;
+pub mod file_iter;
 pub mod market_book;
 pub mod market_definition;
 pub mod market_definition_runner;
 pub mod runner_book;
 mod float_str;
 mod runner_book_sp;
-
 
 pub trait RoundToCents {
     fn round_cent(self) -> Self;

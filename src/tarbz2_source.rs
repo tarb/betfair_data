@@ -47,23 +47,15 @@ impl TarBz2 {
         Ok(Self { source: Some(t) })
     }
 
-    #[pyo3(name = "mutable")]
-    #[args(stable_runner_index = "true")]
-    fn mut_market_adapter(&mut self, stable_runner_index: bool) -> PyResult<MutAdapter> {
+    #[pyo3(name = "iter")]
+    #[args(mutable = "false")]
+    fn iter_adapter(&mut self, py: Python, mutable: bool) -> PyResult<PyObject> {
         let source = self.source.take();
 
         match source {
-            Some(s) => Ok(MutAdapter::new(Box::new(s), stable_runner_index)),
-            None => Err(PyRuntimeError::new_err("empty source")),
-        }
-    }
+            Some(s) if mutable => Ok(MutAdapter::new(Box::new(s)).into_py(py)),
+            Some(s) => Ok(ImmutAdapter::new(Box::new(s)).into_py(py)),
 
-    #[pyo3(name = "immut")]
-    fn immut_adapter(&mut self) -> PyResult<ImmutAdapter> {
-        let source = self.source.take();
-
-        match source {
-            Some(s) => Ok(ImmutAdapter::new(Box::new(s))),
             None => Err(PyRuntimeError::new_err("empty source")),
         }
     }

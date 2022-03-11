@@ -4,13 +4,16 @@ use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 use std::{borrow::Cow, fmt};
 
+use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
-use crate::mutable::config::Config;
+use crate::config::Config;
 use crate::mutable::price_size::{PriceSizeBackLadder, PriceSizeLayLadder};
-use crate::price_size::{F64OrStr, PriceSize};
+use crate::price_size::F64OrStr;
+use crate::strings::StringSetExtNeq;
 
-use crate::strings::{FixedSizeString, StringSetExtNeq};
+use super::runner_book_ex::PyRunnerBookEX;
+use super::runner_book_sp::PyRunnerBookSP;
 
 #[pyclass(name = "Runner")]
 pub struct PyRunner {
@@ -34,10 +37,8 @@ pub struct PyRunner {
     pub sp: Py<PyRunnerBookSP>,
     #[pyo3(get)]
     pub sort_priority: u16,
-    #[pyo3(get)]
-    pub removal_date: Option<i64>,
-    // removal_date: Option<Py<PyDateTime>>,
-    pub removal_date_str: Option<FixedSizeString<24>>,
+    // #[pyo3(get)]
+    pub removal_date: Option<DateTimeString>,
 }
 
 impl PyRunner {
@@ -54,7 +55,6 @@ impl PyRunner {
             adjustment_factor: Default::default(),
             handicap: Default::default(),
             sort_priority: Default::default(),
-            removal_date_str: Default::default(),
             removal_date: Default::default(),
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
@@ -74,38 +74,11 @@ impl PyRunner {
             adjustment_factor: self.adjustment_factor,
             handicap: self.handicap,
             sort_priority: self.sort_priority,
-            removal_date_str: self.removal_date_str,
             removal_date: self.removal_date,
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
         }
     }
-}
-
-#[pyclass(name = "RunnerBookEX")]
-#[derive(Default, Clone)]
-pub struct PyRunnerBookEX {
-    #[pyo3(get)]
-    available_to_back: Vec<PriceSize>,
-    #[pyo3(get)]
-    available_to_lay: Vec<PriceSize>,
-    #[pyo3(get)]
-    traded_volume: Vec<PriceSize>,
-}
-
-#[pyclass(name = "RunnerBookSP")]
-#[derive(Default, Clone)]
-pub struct PyRunnerBookSP {
-    #[pyo3(get)]
-    far_price: Option<f64>,
-    #[pyo3(get)]
-    near_price: Option<f64>,
-    #[pyo3(get)]
-    actual_sp: Option<f64>,
-    #[pyo3(get)]
-    back_stake_taken: Vec<PriceSize>,
-    #[pyo3(get)]
-    lay_liability_taken: Vec<PriceSize>,
 }
 
 pub struct PyRunnerDefSeq<'a, 'py> {
@@ -197,12 +170,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                     }
                 }
 
-                // this config flag will reorder the runners into the order specified in the sort priority
-                // as seen in the data files
-                if !self.config.stable_runner_index {
-                    self.runners
-                        .sort_by_key(|r| r.borrow(self.py).sort_priority);
-                }
+                // // this config flag will reorder the runners into the order specified in the sort priority
+                // // as seen in the data files
+                // if !self.config.stable_runner_index {
+                //     self.runners
+                //         .sort_by_key(|r| r.borrow(self.py).sort_priority);
+                // }
 
                 Ok(())
             }
@@ -276,12 +249,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
                             self.runner.name.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
                         Field::RemovalDate => {
-                            let s = map.next_value::<FixedSizeString<24>>()?;
-                            if self.runner.removal_date_str.contains(&s) {
-                                let ts = chrono::DateTime::parse_from_rfc3339(s.as_str())
-                                    .map_err(Error::custom)?
-                                    .timestamp_millis();
-                                self.runner.removal_date = Some(ts);
+                            let s = map.next_value::<&str>()?;
+                            if self.runner.removal_date.contains(&s) {
+                                let dt = DateTimeString::new(s).map_err(Error::custom)?;
+
+                                self.runner.removal_date = Some(dt);
                             }
                         }
                         Field::Bsp => {

@@ -2,7 +2,7 @@ use log::warn;
 use pyo3::prelude::*;
 use pyo3::PyIterProtocol;
 
-use super::iter::BflwIter;
+use super::file_iter::BflwIter;
 use crate::errors::IOErr;
 use crate::market_source::MarketSource;
 

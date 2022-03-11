@@ -13,7 +13,7 @@ use crate::bflw::RoundToCents;
 use crate::enums::MarketStatus;
 use crate::ids::MarketID;
 use crate::immutable::container::SyncObj;
-use crate::immutable::datetime::{DateTime, DateTimeString};
+use crate::datetime::{DateTime, DateTimeString};
 use crate::market_source::SourceConfig;
 
 #[pyclass]

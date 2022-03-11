@@ -4,25 +4,26 @@ use serde::de::DeserializeSeed;
 use std::collections::VecDeque;
 use std::path::PathBuf;
 
-use super::container::SyncObj;
-use super::market::{PyMarket, PyMarketsDeser};
+use crate::config::Config;
+use crate::immutable::container::SyncObj;
+use super::market::{PyMarketMut, PyMarketToken};
 use crate::deser::DeserializerWithData;
 use crate::market_source::{SourceConfig, SourceItem};
 
-#[pyclass(name = "ImmutIter")]
-pub struct ImmutIter {
+#[pyclass(name = "MutIter")]
+pub struct MutIter {
     #[pyo3(get)]
     file_name: SyncObj<PathBuf>,
     config: SourceConfig,
     deser: Option<DeserializerWithData>,
-    books: Vec<Py<PyMarket>>,
+    books: Vec<Py<PyMarketMut>>,
 
-    iter_stack: VecDeque<Py<PyMarket>>,
+    iter_stack: VecDeque<Py<PyMarketMut>>,
 }
 
-impl ImmutIter {
+impl MutIter {
     pub fn new_object(item: SourceItem, config: SourceConfig, py: Python) -> PyObject {
-        ImmutIter {
+        MutIter {
             file_name: SyncObj::new(item.file),
             deser: Some(item.deser),
             books: Vec::new(),
@@ -34,12 +35,14 @@ impl ImmutIter {
 
     fn drive_deserialize(
         deser: &mut DeserializerWithData,
-        books: &[Py<PyMarket>],
+        books: &[Py<PyMarketMut>],
         config: SourceConfig,
         py: Python,
-    ) -> Result<VecDeque<Py<PyMarket>>, serde_json::Error> {
+    ) -> Result<VecDeque<Py<PyMarketMut>>, serde_json::Error> {
         deser.with_dependent_mut(|_, deser| {
-            PyMarketsDeser {
+            let config = Config{ cumulative_runner_tv: config.cumulative_runner_tv};
+            
+            PyMarketToken {
                 markets: books,
                 py,
                 config,
@@ -50,7 +53,7 @@ impl ImmutIter {
 }
 
 #[pymethods]
-impl ImmutIter {
+impl MutIter {
     #[new]
     #[args(cumulative_runner_tv = "true")]
     fn __new__(file: PathBuf, bytes: &[u8], cumulative_runner_tv: bool) -> PyResult<Self> {
@@ -61,7 +64,7 @@ impl ImmutIter {
         let deser = DeserializerWithData::build(bytes.to_owned())
             .map_err(|err| PyErr::new::<exceptions::PyRuntimeError, _>(err.to_string()))?;
 
-        Ok(ImmutIter {
+        Ok(MutIter {
             file_name: SyncObj::new(file),
             deser: Some(deser),
             books: Vec::new(),
@@ -72,14 +75,12 @@ impl ImmutIter {
 }
 
 #[pyproto]
-impl<'p> PyIterProtocol for ImmutIter {
+impl<'p> PyIterProtocol for MutIter {
     fn __iter__(slf: PyRef<'p, Self>) -> PyRef<'p, Self> {
         slf
     }
 
     fn __next__(mut slf: PyRefMut<'p, Self>) -> Option<PyObject> {
-        
-        
         if let Some(m) = slf.iter_stack.pop_front() {
             let index = {
                 let market = m.borrow(slf.py());

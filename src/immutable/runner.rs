@@ -7,7 +7,7 @@ use serde_json::value::RawValue;
 use std::sync::Arc;
 
 use super::container::{PyRep, SyncObj};
-use super::datetime::DateTimeString;
+use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};

@@ -6,7 +6,7 @@ use pyo3::{
 use std::sync::Arc;
 use std::{lazy::OnceCell, path::PathBuf};
 
-use super::datetime::DateTimeString;
+use crate::datetime::DateTimeString;
 use crate::{price_size::PriceSize, strings::FixedSizeString};
 
 pub trait PyRep {

@@ -11,7 +11,7 @@ use crate::ids::{EventID, EventTypeID};
 use crate::immutable::container::SyncObj;
 use crate::market_source::SourceConfig;
 use crate::strings::FixedSizeString;
-use crate::immutable::datetime::DateTimeString;
+use crate::datetime::DateTimeString;
 use super::market_definition_runner::MarketDefinitionRunner;
 use super::runner_book::RunnerBook;
 

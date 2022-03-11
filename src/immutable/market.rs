@@ -10,14 +10,14 @@ use super::container::SyncObj;
 use super::definition::MarketDefinition;
 use super::runner::PyRunner;
 use crate::ids::MarketID;
-use crate::immutable::datetime::DateTime;
+use crate::datetime::DateTime;
 use crate::immutable::definition::MarketDefinitionDeser;
 use crate::immutable::runner::RunnerChangeSeq;
 use crate::market_source::SourceConfig;
 use crate::strings::FixedSizeString;
 
 #[derive(Clone)]
-#[pyclass(name = "MarketImage")]
+#[pyclass(name = "MarketImmut")]
 pub struct PyMarket {
     #[pyo3(get)]
     pub market_id: SyncObj<MarketID>,
@@ -43,7 +43,6 @@ impl PyMarket {
     fn get_event_type_id(&self, py: Python) -> PyObject {
         self.def.event_type_id.into_py(py)
     }
-
     #[getter(bet_delay)]
     fn get_bet_delay(&self, py: Python) -> PyObject {
         self.def.bet_delay.into_py(py)
@@ -452,7 +451,7 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                 } else {
                     Some(PyMarket {
                         market_id: SyncObj::new(self.id),
-                        publish_time: Default::default(),
+                        publish_time: DateTime::new(0),
                         clk: Default::default(),
                         total_matched: total_volume.unwrap_or(0.0),
                         runners: next_runners

@@ -3,7 +3,7 @@ from datetime import datetime
 
 from betfair_data import bflw
 
-class MarketImage():
+class Market():
     """
     A class representing a Betfair Market.
     """
@@ -69,25 +69,6 @@ class MarketImage():
     venue: Optional[str]
     version: int
 
-class Market(MarketImage):
-    """"""
-    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True, stable_runner_index = True) -> None: ...
-
-    def update(self) -> bool: 
-        """ Update the market with the next delta
-
-        Example:
-            >>> market.update()
-        """  
-    def copy(self) -> MarketImage:
-        """ Create an immutable copy of the market, including runners and prices that wont be updated
-
-        Example:
-            >>> c = market.copy()
-            >>> market.update()
-            >>> market.publish_time != c.publish_time
-            True
-        """  
 
 class Runner():
     """
@@ -126,24 +107,21 @@ class PriceSize():
     size: float
 
 # sources
-class MutableAdapter(Iterator[Market]): ...
-
-class ImmutAdapter(Iterator[ImmutIter]): ...
-class ImmutIter(Iterator[MarketImage]):
+class MarketAdapter(Iterator[File]): ...
+class File(Iterator[Market]):
     def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True) -> None: ...
     file_name: str
+
 
 class TarBz2():
     """"""
     def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
-    def mutable(self, stable_runner_index = True) -> MutableAdapter: ...
-    def immut(self, stable_runner_index = True) -> ImmutAdapter: ...
+    def iter(self, mutable = False) -> MarketAdapter: ...
     def bflw(self) -> bflw.BflwAdapter: ...
 
 
 class Files():
     """"""
     def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
-    def mutable(self, stable_runner_index = True) -> MutableAdapter: ...
-    def immut(self, stable_runner_index = True) -> ImmutAdapter: ...
+    def iter(self, mutable = False) -> MarketAdapter: ...
     def bflw(self) -> bflw.BflwAdapter: ...

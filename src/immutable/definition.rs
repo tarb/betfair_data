@@ -10,7 +10,7 @@ use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
 use crate::enums::{MarketBettingType, MarketStatus, SelectionStatus};
 use crate::ids::{EventID, EventTypeID, SelectionID};
 use crate::immutable::container::SyncObj;
-use crate::immutable::datetime::DateTimeString;
+use crate::datetime::DateTimeString;
 use crate::immutable::runner::PyRunner;
 use crate::market_source::SourceConfig;
 use crate::price_size::F64OrStr;
