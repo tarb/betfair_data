@@ -39,14 +39,6 @@ pub struct File {
 
 #[pymethods]
 impl File {
-    // #[new]
-    // #[args(cumulative_runner_tv = "true")]
-    // fn __new__(file: PathBuf, bytes: &[u8], cumulative_runner_tv: bool) -> PyResult<Self> {
-    //     Ok(Self {
-    //         inner: FileIter::new(file, bytes, cumulative_runner_tv)?,
-    //     })
-    // }
-
     fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
         slf
     }
@@ -55,6 +47,7 @@ impl File {
         self.inner.next(py)
     }
 
+    #[getter]
     fn file_name(&self) -> &Path {
         self.inner.file_name()
     }
@@ -68,7 +61,7 @@ impl From<(SourceItem, SourceConfig)> for File {
     }
 }
 
-struct ImmutableRep();
+pub struct ImmutableRep();
 impl IntoMarketIter for ImmutableRep {
     type Market = PyMarket;
     type Deser<'a, 'de, 'py> = PyMarketsDeser<'a, 'py>;

@@ -2,9 +2,9 @@ from datetime import datetime
 from typing import Iterator, Optional, Sequence, str
 import betfair_data
 
-class BflwAdapter(Iterator[BflwIter]): ...
+class BflwAdapter(Iterator[File]): ...
 
-class BflwIter(Iterator[Sequence[MarketBook]]):
+class File(Iterator[Sequence[MarketBook]]):
     def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True) -> None: ...
     file_name: str
 
@@ -43,7 +43,6 @@ class RunnerBook:
     matches: None
     orders: None
 
-
 class MarketDefinition:
     bet_delay: int
     betting_type: str
@@ -81,7 +80,6 @@ class MarketDefinition:
     priceLadderDefinition: None
     keyLineDefinition: None
     raceType: None
-
 
 class MarketDefinitionRunner:
     adjustment_factor: Optional[float]

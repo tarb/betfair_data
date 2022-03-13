@@ -1,10 +1,11 @@
 from typing import Sequence 
-
 import unittest.mock
 import tarfile
 import bz2
 import betfairlightweight
+import logging
 
+logging.basicConfig(level=logging.FATAL, format='%(levelname)s %(name)s %(message)s')
 
 trading = betfairlightweight.APIClient("username", "password", "appkey")
 listener = betfairlightweight.StreamListener(
@@ -21,13 +22,14 @@ def load_tar(file_paths: Sequence[str]):
     for file_path in file_paths:
         with tarfile.TarFile(file_path) as archive:
             for file in archive:
-                yield bz2.open(archive.extractfile(file)).read()
+                with bz2.open(archive.extractfile(file)) as f:
+                    yield f
     return None
 
 market_count = 0
 update_count = 0
 
-for i, file_obj in enumerate(load_tar(paths)):
+for file_obj in load_tar(paths):
     with unittest.mock.patch("builtins.open", lambda f, _: f):  
         stream = trading.streaming.create_historical_generator_stream(
             file_path=file_obj,
@@ -40,5 +42,5 @@ for i, file_obj in enumerate(load_tar(paths)):
             for market_book in market_books:
                 update_count += 1
 
-    print(f"Market {market_count} Update {update_count}", end='\r')
+    print(f"Market {market_count} Update {update_count} File:{file_obj}", end='\r')
 print(f"Market {market_count} Update {update_count}")

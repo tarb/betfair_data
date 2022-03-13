@@ -9,13 +9,17 @@
     is_some_with,
     min_specialization,
     let_chains,
-    generic_associated_types,
+    generic_associated_types
 )]
 
 mod bflw;
+mod config;
+mod datetime;
 mod deser;
 mod enums;
 mod errors;
+mod file;
+mod file_iter;
 mod files_source;
 mod ids;
 mod immutable;
@@ -24,24 +28,21 @@ mod mutable;
 mod price_size;
 mod strings;
 mod tarbz2_source;
-mod datetime;
-mod file_iter;
-mod config;
 
 use crate::bflw::file_iter::BflwFile;
-use crate::bflw::market_book::MarketBook;
-use crate::bflw::market_definition::MarketDefinition;
-use crate::bflw::market_definition_runner::MarketDefinitionRunner;
-use crate::bflw::runner_book::RunnerBook;
+use crate::file::File;
 use crate::files_source::Files;
-use crate::mutable::market::{PyMarketMut};
-use crate::mutable::runner::{PyRunner};
-use crate::mutable::runner_book_ex::{PyRunnerBookEX};
-use crate::mutable::runner_book_sp::{PyRunnerBookSP};
-
 use crate::price_size::PriceSize;
 use crate::tarbz2_source::TarBz2;
 
+use bflw::market_book::MarketBook;
+use bflw::market_definition::MarketDefinition;
+use bflw::market_definition_runner::MarketDefinitionRunner;
+use bflw::runner_book::RunnerBook;
+use immutable::market::PyMarket;
+use immutable::runner::PyRunner;
+use immutable::runner_book_ex::RunnerBookEX;
+use immutable::runner_book_sp::RunnerBookSP;
 use pyo3::prelude::*;
 
 #[cfg(not(target_os = "linux"))]
@@ -57,11 +58,12 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
 
     m.add_class::<Files>()?;
     m.add_class::<TarBz2>()?;
+    m.add_class::<File>()?;
     m.add_class::<PriceSize>()?;
-    m.add_class::<PyMarketMut>()?;
+    m.add_class::<PyMarket>()?;
     m.add_class::<PyRunner>()?;
-    m.add_class::<PyRunnerBookEX>()?;
-    m.add_class::<PyRunnerBookSP>()?;
+    m.add_class::<RunnerBookEX>()?;
+    m.add_class::<RunnerBookSP>()?;
 
     let bflw = PyModule::new(py, "bflw")?;
     bflw.add_class::<BflwFile>()?;

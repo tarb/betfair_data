@@ -1,11 +1,9 @@
-use std::path::PathBuf;
-use std::marker::PhantomData;
 use log::warn;
+use std::marker::PhantomData;
+use std::path::PathBuf;
 
 use crate::deser::DeserializerWithData;
 use crate::errors::IOErr;
-
-
 
 pub trait MarketSource: Iterator<Item = Result<SourceItem, IOErr>> {
     fn config(&self) -> SourceConfig;
@@ -26,7 +24,6 @@ impl SourceItem {
         Self { file, deser }
     }
 }
-
 
 pub struct Adapter<T: From<(SourceItem, SourceConfig)>> {
     source: Box<dyn MarketSource + Send>,
