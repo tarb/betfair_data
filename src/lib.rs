@@ -28,7 +28,7 @@ mod datetime;
 mod file_iter;
 mod config;
 
-use crate::bflw::file_iter::BflwIter;
+use crate::bflw::file_iter::BflwFile;
 use crate::bflw::market_book::MarketBook;
 use crate::bflw::market_definition::MarketDefinition;
 use crate::bflw::market_definition_runner::MarketDefinitionRunner;
@@ -64,7 +64,7 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyRunnerBookSP>()?;
 
     let bflw = PyModule::new(py, "bflw")?;
-    bflw.add_class::<BflwIter>()?;
+    bflw.add_class::<BflwFile>()?;
     bflw.add_class::<MarketBook>()?;
     bflw.add_class::<MarketDefinitionRunner>()?;
     bflw.add_class::<MarketDefinition>()?;

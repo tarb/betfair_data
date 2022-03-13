@@ -1,14 +1,38 @@
 use log::warn;
-use pyo3::{exceptions, prelude::*, PyIterProtocol};
+use pyo3::{exceptions, prelude::*};
 use serde::de::DeserializeSeed;
 use std::path::PathBuf;
 
 use super::market_book::{MarketBook, MarketBooksDeser};
 use crate::deser::DeserializerWithData;
-use crate::market_source::{SourceConfig, SourceItem};
+use crate::market_source::{Adapter, MarketSource, SourceConfig, SourceItem};
 
-#[pyclass(name = "BflwIter")]
-pub struct BflwIter {
+#[pyclass]
+pub struct BflwAdapter {
+    inner: Adapter<BflwFile>,
+}
+
+impl BflwAdapter {
+    pub fn new(source: Box<dyn MarketSource + Send>) -> Self {
+        Self {
+            inner: Adapter::new(source),
+        }
+    }
+}
+
+#[pymethods]
+impl BflwAdapter {
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
+    }
+
+    fn __next__(&mut self, py: Python) -> Option<PyObject> {
+        self.inner.next().map(|f| f.into_py(py))
+    }
+}
+
+#[pyclass(name = "File")]
+pub struct BflwFile {
     #[pyo3(get)]
     file_name: PathBuf,
     config: SourceConfig,
@@ -16,17 +40,7 @@ pub struct BflwIter {
     books: Vec<Py<MarketBook>>,
 }
 
-impl BflwIter {
-    pub fn new_object(item: SourceItem, config: SourceConfig, py: Python) -> PyObject {
-        BflwIter {
-            file_name: item.file,
-            deser: Some(item.deser),
-            books: Vec::new(),
-            config,
-        }
-        .into_py(py)
-    }
-
+impl BflwFile {
     fn drive_deserialize(
         deser: &mut DeserializerWithData,
         books: &[Py<MarketBook>],
@@ -34,13 +48,31 @@ impl BflwIter {
         py: Python,
     ) -> Result<Vec<Py<MarketBook>>, serde_json::Error> {
         deser.with_dependent_mut(|_, deser| {
-            MarketBooksDeser{markets: books, py, config}.deserialize(&mut deser.0)
+            MarketBooksDeser {
+                markets: books,
+                py,
+                config,
+            }
+            .deserialize(&mut deser.0)
         })
     }
 }
 
+impl From<(SourceItem, SourceConfig)> for BflwFile {
+    fn from(s: (SourceItem, SourceConfig)) -> Self {
+        let (item, config) = s;
+
+        Self {
+            file_name: item.file,
+            deser: Some(item.deser),
+            books: Vec::new(),
+            config,
+        }
+    }
+}
+
 #[pymethods]
-impl BflwIter {
+impl BflwFile {
     #[new]
     #[args(cumulative_runner_tv = "true")]
     fn __new__(file: PathBuf, bytes: &[u8], cumulative_runner_tv: bool) -> PyResult<Self> {
@@ -51,7 +83,7 @@ impl BflwIter {
         let deser = DeserializerWithData::build(bytes.to_owned())
             .map_err(|err| PyErr::new::<exceptions::PyRuntimeError, _>(err.to_string()))?;
 
-        Ok(BflwIter {
+        Ok(Self {
             file_name: file,
             deser: Some(deser),
             books: Vec::new(),
@@ -59,15 +91,11 @@ impl BflwIter {
         })
     }
 
-}
-
-#[pyproto]
-impl<'p> PyIterProtocol for BflwIter {
-    fn __iter__(slf: PyRef<'p, Self>) -> PyRef<'p, Self> {
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
         slf
     }
 
-    fn __next__(mut slf: PyRefMut<'p, Self>) -> Option<PyObject> {
+    fn __next__(mut slf: PyRefMut<Self>) -> Option<PyObject> {
         let next_books = {
             let config = slf.config;
             let mut deser = slf.deser.take().expect("Iter without deser");

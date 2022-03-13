@@ -1,12 +1,11 @@
-use pyo3::{prelude::*, PyObjectProtocol};
-use std::cmp::PartialEq;
+use pyo3::prelude::*;
 use serde::{
     de::{Error, MapAccess, SeqAccess, Visitor},
     Deserialize, Deserializer,
 };
+use std::cmp::PartialEq;
 
 use std::fmt;
-
 
 /**
  * PriceSize
@@ -35,30 +34,25 @@ impl PartialEq for PriceSize {
     }
 }
 
-#[pyproto]
-impl PyObjectProtocol for PriceSize {
-    fn __str__(&self) -> String {
-        format!("[{:.2},{:.2}]", self.price, self.size)
-    }
-
-    fn __repr__(&self) -> String {
-        format!("<PriceSize [{:.2},{:.2}]>", self.price, self.size)
-    }
-}
-
-
 impl ToPyObject for PriceSize {
     fn to_object(&self, py: Python) -> PyObject {
         self.into_py(py)
     }
 }
 
-
 #[pymethods]
 impl PriceSize {
     #[new]
     fn py_constructor(price: f64, size: f64) -> Self {
         Self { price, size }
+    }
+
+    fn __str__(&self) -> String {
+        format!("[{:.2},{:.2}]", self.price, self.size)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<PriceSize [{:.2},{:.2}]>", self.price, self.size)
     }
 }
 
@@ -76,7 +70,7 @@ impl std::ops::Deref for F64OrStr {
 
     #[inline]
     fn deref(&self) -> &f64 {
-        &self.0 
+        &self.0
     }
 }
 
@@ -192,7 +186,6 @@ impl<'de> Deserialize<'de> for PriceSize {
         deserializer.deserialize_struct("PriceSize", FIELDS, PriceSizeVisitor)
     }
 }
-
 
 #[cfg(test)]
 mod tests {

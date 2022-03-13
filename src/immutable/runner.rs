@@ -11,7 +11,7 @@ use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
-use crate::market_source::SourceConfig;
+use crate::config::Config;
 use crate::price_size::{F64OrStr, PriceSize};
 use super::runner_book_ex::RunnerBookEX;
 use super::runner_book_sp::RunnerBookSP;
@@ -66,7 +66,7 @@ pub struct RunnerChangeSeq<'a, 'py> {
     pub next: Option<Vec<Py<PyRunner>>>,
     pub py: Python<'py>,
     pub image: bool,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
@@ -81,7 +81,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             next: Option<Vec<Py<PyRunner>>>,
             py: Python<'py>,
             image: bool,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = Option<Vec<Py<PyRunner>>>;
@@ -165,7 +165,7 @@ struct RunnerChangeDeser<'py> {
     runner: Option<PyRef<'py, PyRunner>>,
     py: Python<'py>,
     image: bool,
-    config: SourceConfig,
+    config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
     type Value = PyRunner;
@@ -194,7 +194,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
             runner: Option<PyRef<'py, PyRunner>>,
             py: Python<'py>,
             image: bool,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'py> Visitor<'de> for RunnerChangeVisitor<'py> {
             type Value = PyRunner;

@@ -12,12 +12,12 @@ use std::path::PathBuf;
 use tar::Archive;
 use tar::Entries;
 
-use crate::bflw::adapter::BflwAdapter;
+use crate::bflw::file_iter::BflwAdapter;
 use crate::deser::DeserializerWithData;
 use crate::errors::IOErr;
-use crate::immutable::adapter::ImmutAdapter;
+use crate::immutable::file_iter::ImmutAdapter;
 use crate::market_source::{MarketSource, SourceConfig, SourceItem};
-use crate::mutable::adapter::MutAdapter;
+use crate::mutable::file_iter::MutAdapter;
 
 #[pyclass]
 pub struct TarBz2 {

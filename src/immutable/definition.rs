@@ -12,7 +12,7 @@ use crate::ids::{EventID, EventTypeID, SelectionID};
 use crate::immutable::container::SyncObj;
 use crate::datetime::DateTimeString;
 use crate::immutable::runner::PyRunner;
-use crate::market_source::SourceConfig;
+use crate::config::Config;
 use crate::price_size::F64OrStr;
 use crate::strings::FixedSizeString;
 
@@ -221,7 +221,7 @@ pub struct MarketDefinitionDeser<'a, 'py> {
     pub runners: Option<&'a [Py<PyRunner>]>,
     pub next_runners: Option<Vec<Py<PyRunner>>>,
     pub py: Python<'py>,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
     type Value = (Option<Arc<MarketDefinition>>, Option<Vec<Py<PyRunner>>>);
@@ -277,7 +277,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
             runners: Option<&'a [Py<PyRunner>]>,
             next_runners: Option<Vec<Py<PyRunner>>>,
             py: Python<'py>,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitor<'a, 'py> {
             type Value = (Option<Arc<MarketDefinition>>, Option<Vec<Py<PyRunner>>>);
@@ -706,7 +706,7 @@ pub struct RunnerDefSeq<'a, 'py> {
     pub runners: Option<&'a [Py<PyRunner>]>,
     pub next: Option<Vec<Py<PyRunner>>>,
     pub py: Python<'py>,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
     type Value = Option<Vec<Py<PyRunner>>>;
@@ -720,7 +720,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
             next: Option<Vec<Py<PyRunner>>>,
             py: Python<'py>,
             #[allow(dead_code)]
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = Option<Vec<Py<PyRunner>>>;

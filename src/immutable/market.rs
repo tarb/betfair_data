@@ -9,11 +9,11 @@ use std::sync::Arc;
 use super::container::SyncObj;
 use super::definition::MarketDefinition;
 use super::runner::PyRunner;
+use crate::config::Config;
 use crate::ids::MarketID;
 use crate::datetime::DateTime;
 use crate::immutable::definition::MarketDefinitionDeser;
 use crate::immutable::runner::RunnerChangeSeq;
-use crate::market_source::SourceConfig;
 use crate::strings::FixedSizeString;
 
 #[derive(Clone)]
@@ -160,7 +160,7 @@ impl PyMarket {
 pub struct PyMarketsDeser<'a, 'py> {
     pub markets: &'a [Py<PyMarket>],
     pub py: Python<'py>,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketsDeser<'a, 'py> {
     type Value = VecDeque<Py<PyMarket>>;
@@ -181,7 +181,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketsDeser<'a, 'py> {
         struct PyMarketsDeserVisitor<'a, 'py> {
             markets: &'a [Py<PyMarket>],
             py: Python<'py>,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketsDeserVisitor<'a, 'py> {
             type Value = VecDeque<Py<PyMarket>>;
@@ -248,7 +248,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketsDeser<'a, 'py> {
 struct MarketMcSeq<'a, 'py> {
     markets: &'a [Py<PyMarket>],
     py: Python<'py>,
-    config: SourceConfig,
+    config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
     type Value = VecDeque<Py<PyMarket>>;
@@ -260,7 +260,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
         struct MarketMcSeqVisitor<'a, 'py> {
             markets: &'a [Py<PyMarket>],
             py: Python<'py>,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketMcSeqVisitor<'a, 'py> {
             type Value = VecDeque<Py<PyMarket>>;
@@ -329,7 +329,7 @@ struct MarketMc<'py> {
     market: Option<PyRef<'py, PyMarket>>,
     py: Python<'py>,
     image: bool,
-    config: SourceConfig,
+    config: Config,
 }
 impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
     type Value = Option<PyMarket>;
@@ -358,7 +358,7 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
             market: Option<PyRef<'py, PyMarket>>,
             py: Python<'py>,
             image: bool,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'py> Visitor<'de> for MarketMcVisitor<'py> {
             type Value = Option<PyMarket>;

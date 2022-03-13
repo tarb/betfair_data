@@ -12,9 +12,7 @@ paths = [
 market_count = 0
 update_count = 0
 
-for file in betfair_data.TarBz2(paths).iter(mutable=False):
-    # print(file.file_name)
-
+for file in betfair_data.TarBz2(paths).iter(mutable=True):
     market_count += 1
 
     for market in file:
