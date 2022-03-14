@@ -1,9 +1,7 @@
 use std::path::Path;
-
 use pyo3::prelude::*;
-// use std::path::PathBuf;
 
-use super::market::{PyMarket, PyMarketsDeser};
+use super::market::{Market, MarketsDeser};
 use crate::config::Config;
 use crate::file_iter::{FileIter, IntoMarketIter, MarketID};
 use crate::market_source::{Adapter, MarketSource, SourceConfig, SourceItem};
@@ -34,7 +32,7 @@ impl ImmutAdapter {
 
 #[pyclass(name = "File")]
 pub struct File {
-    inner: FileIter<PyMarket, ImmutableRep>,
+    inner: FileIter<Market, ImmutableRep>,
 }
 
 #[pymethods]
@@ -63,22 +61,22 @@ impl From<(SourceItem, SourceConfig)> for File {
 
 pub struct ImmutableRep();
 impl IntoMarketIter for ImmutableRep {
-    type Market = PyMarket;
-    type Deser<'a, 'de, 'py> = PyMarketsDeser<'a, 'py>;
+    type Market = Market;
+    type Deser<'a, 'de, 'py> = MarketsDeser<'a, 'py>;
 
     fn new<'a, 'de, 'py>(
         books: &'a [Py<Self::Market>],
         py: Python<'py>,
         config: Config,
     ) -> Self::Deser<'a, 'de, 'py> {
-        PyMarketsDeser {
+        MarketsDeser {
             markets: books,
             py,
             config,
         }
     }
 }
-impl MarketID for PyMarket {
+impl MarketID for Market {
     fn id(&self) -> &str {
         self.market_id.as_str()
     }

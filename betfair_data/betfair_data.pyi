@@ -68,6 +68,9 @@ class Market():
     venue: Optional[str]
     version: int
 
+    def copy(self) -> Market: ...
+    """Performs a deep copy if mutable, or reference copy if immutable"""
+
 
 class Runner():
     """

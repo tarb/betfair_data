@@ -11,7 +11,7 @@ use crate::enums::{MarketBettingType, MarketStatus, SelectionStatus};
 use crate::ids::{EventID, EventTypeID, SelectionID};
 use crate::immutable::container::SyncObj;
 use crate::datetime::DateTimeString;
-use crate::immutable::runner::PyRunner;
+use crate::immutable::runner::Runner;
 use crate::config::Config;
 use crate::price_size::F64OrStr;
 use crate::strings::FixedSizeString;
@@ -25,19 +25,19 @@ pub struct MarketDefinition {
     pub discount_allowed: bool,
     pub each_way_divisor: Option<f64>,
     pub event_id: EventID,
-    pub event_name: Option<SyncObj<Arc<String>>>,
+    pub event_name: Option<SyncObj<Arc<str>>>,
     pub event_type_id: EventTypeID,
     pub in_play: bool,
     pub market_base_rate: f32,
-    pub market_type: SyncObj<Arc<String>>,
-    pub market_name: Option<SyncObj<Arc<String>>>,
+    pub market_type: SyncObj<Arc<str>>,
+    pub market_name: Option<SyncObj<Arc<str>>>,
     pub number_of_active_runners: u16,
     pub number_of_winners: u8,
     pub persistence_enabled: bool,
     pub runners_voidable: bool,
-    pub timezone: SyncObj<Arc<String>>,
+    pub timezone: SyncObj<Arc<str>>,
     pub turn_in_play_enabled: bool,
-    pub venue: Option<SyncObj<Arc<String>>>,
+    pub venue: Option<SyncObj<Arc<str>>>,
     pub version: u64,
     pub status: MarketStatus,
     pub betting_type: MarketBettingType,
@@ -114,13 +114,13 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .unwrap(),
             market_type: self
                 .market_type
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap(),
             timezone: self
                 .timezone
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap(),
-            venue: self.venue.map(|s| SyncObj::new(Arc::new(String::from(s)))),
+            venue: self.venue.map(|s| SyncObj::new(Arc::from(s))),
             country_code: self
                 .country_code
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap()))
@@ -137,10 +137,10 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
             market_name: self
                 .market_name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned()))),
+                .map(|s| SyncObj::new(Arc::from(s.into_owned()))),
             event_name: self
                 .event_name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned()))),
+                .map(|s| SyncObj::new(Arc::from(s.into_owned()))),
         }
     }
 
@@ -181,13 +181,13 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .unwrap_or_else(|| market.market_time.clone()),
             market_type: self
                 .market_type
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap_or_else(|| market.market_type.clone()),
             timezone: self
                 .timezone
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap_or_else(|| market.timezone.clone()),
-            venue: self.venue.map(|s| SyncObj::new(Arc::new(String::from(s)))),
+            venue: self.venue.map(|s| SyncObj::new(Arc::from(s))),
             country_code: self
                 .country_code
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap()))
@@ -206,11 +206,11 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .or_else(|| market.suspend_time.clone()),
             market_name: self
                 .market_name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned())))
+                .map(|s| SyncObj::new(Arc::from(s.into_owned())))
                 .or_else(|| market.market_name.clone()),
             event_name: self
                 .event_name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned())))
+                .map(|s| SyncObj::new(Arc::from(s.into_owned())))
                 .or_else(|| market.event_name.clone()),
         }
     }
@@ -218,13 +218,13 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
 
 pub struct MarketDefinitionDeser<'a, 'py> {
     pub def: Option<&'a MarketDefinition>,
-    pub runners: Option<&'a [Py<PyRunner>]>,
-    pub next_runners: Option<Vec<Py<PyRunner>>>,
+    pub runners: Option<&'a [Py<Runner>]>,
+    pub next_runners: Option<Vec<Py<Runner>>>,
     pub py: Python<'py>,
     pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
-    type Value = (Option<Arc<MarketDefinition>>, Option<Vec<Py<PyRunner>>>);
+    type Value = (Option<Arc<MarketDefinition>>, Option<Vec<Py<Runner>>>);
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -274,13 +274,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 
         struct MarketDefinitionVisitor<'a, 'py> {
             def: Option<&'a MarketDefinition>,
-            runners: Option<&'a [Py<PyRunner>]>,
-            next_runners: Option<Vec<Py<PyRunner>>>,
+            runners: Option<&'a [Py<Runner>]>,
+            next_runners: Option<Vec<Py<Runner>>>,
             py: Python<'py>,
             config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitor<'a, 'py> {
-            type Value = (Option<Arc<MarketDefinition>>, Option<Vec<Py<PyRunner>>>);
+            type Value = (Option<Arc<MarketDefinition>>, Option<Vec<Py<Runner>>>);
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -291,7 +291,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                 V: MapAccess<'de>,
             {
                 let mut upt: MarketDefinitionUpdate = MarketDefinitionUpdate::default();
-                let mut next_runners: Option<Vec<Py<PyRunner>>> = self.next_runners;
+                let mut next_runners: Option<Vec<Py<Runner>>> = self.next_runners;
                 let mut changed = false;
 
                 while let Some(key) = map.next_key()? {
@@ -410,7 +410,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let timezone = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.timezone.as_str() != timezone)
+                                .is_some_with(|def| def.timezone.as_ref() != timezone)
                                 || self.def.is_none()
                             {
                                 upt.timezone = Some(timezone);
@@ -538,7 +538,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let market_type = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.market_type.as_str() != market_type)
+                                .is_some_with(|def| def.market_type.as_ref() != market_type)
                                 || self.def.is_none()
                             {
                                 upt.market_type = Some(market_type);
@@ -703,27 +703,27 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 }
 
 pub struct RunnerDefSeq<'a, 'py> {
-    pub runners: Option<&'a [Py<PyRunner>]>,
-    pub next: Option<Vec<Py<PyRunner>>>,
+    pub runners: Option<&'a [Py<Runner>]>,
+    pub next: Option<Vec<Py<Runner>>>,
     pub py: Python<'py>,
     pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
-    type Value = Option<Vec<Py<PyRunner>>>;
+    type Value = Option<Vec<Py<Runner>>>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
         struct RunnerSeqVisitor<'a, 'py> {
-            runners: Option<&'a [Py<PyRunner>]>,
-            next: Option<Vec<Py<PyRunner>>>,
+            runners: Option<&'a [Py<Runner>]>,
+            next: Option<Vec<Py<Runner>>>,
             py: Python<'py>,
             #[allow(dead_code)]
             config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
-            type Value = Option<Vec<Py<PyRunner>>>;
+            type Value = Option<Vec<Py<Runner>>>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -741,7 +741,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                         while let Some(change) = seq.next_element::<RunnerDefUpdate>()? {
                             // find runner and index
                             enum Action {
-                                Insert(Py<PyRunner>, usize),
+                                Insert(Py<Runner>, usize),
                                 Swap(usize, usize),
                                 Nothing,
                             }
@@ -794,7 +794,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
 
                     // no previous runner serialization this update, serialize in rd order
                     None => {
-                        let mut next: Option<Vec<Py<PyRunner>>> = None;
+                        let mut next: Option<Vec<Py<Runner>>> = None;
                         let mut i = 0;
 
                         while let Some(change) = seq.next_element::<RunnerDefUpdate>()? {
@@ -811,7 +811,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                     // TODO tidy this
                                     if change.diff(&sel, self.py) {
                                         let rs = self.runners.unwrap();
-                                        let mut n: Vec<Py<PyRunner>> =
+                                        let mut n: Vec<Py<Runner>> =
                                             Vec::with_capacity(rs.len() + 1);
                                         for r in &rs[0..i] {
                                             n.push(r.clone_ref(self.py));
@@ -824,7 +824,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                         next = Some(n);
                                     } else if ri != i {
                                         let rs = self.runners.unwrap();
-                                        let mut n: Vec<Py<PyRunner>> =
+                                        let mut n: Vec<Py<Runner>> =
                                             Vec::with_capacity(rs.len() + 1);
                                         for r in &rs[0..i] {
                                             n.push(r.clone_ref(self.py));
@@ -850,7 +850,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                 }
 
                                 (None, None) => {
-                                    let mut n: Vec<Py<PyRunner>> = Vec::with_capacity(12);
+                                    let mut n: Vec<Py<Runner>> = Vec::with_capacity(12);
                                     if let Some(rs) = self.runners {
                                         for r in &rs[0..1] {
                                             n.push(r.clone_ref(self.py));
@@ -900,19 +900,19 @@ struct RunnerDefUpdate<'a> {
 }
 
 impl<'a> RunnerDefUpdate<'a> {
-    fn create(&self, py: Python) -> PyRunner {
+    fn create(&self, py: Python) -> Runner {
         let sp = RunnerBookSP {
             actual_sp: self.bsp.map(|f| *f),
             ..Default::default()
         };
 
-        PyRunner {
+        Runner {
             selection_id: self.id,
             status: self.status,
             adjustment_factor: self.adjustment_factor,
             handicap: self.hc.map(|f| *f),
             sort_priority: self.sort_priority,
-            name: self.name.map(|s| SyncObj::new(Arc::new(String::from(s)))),
+            name: self.name.map(|s| SyncObj::new(Arc::from(s))),
             removal_date: self
                 .removal_date
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
@@ -923,7 +923,7 @@ impl<'a> RunnerDefUpdate<'a> {
         }
     }
 
-    fn diff(&self, runner: &PyRunner, py: Python) -> bool {
+    fn diff(&self, runner: &Runner, py: Python) -> bool {
         runner.status != self.status
             || runner.adjustment_factor != self.adjustment_factor
             || runner.sort_priority != self.sort_priority
@@ -932,14 +932,14 @@ impl<'a> RunnerDefUpdate<'a> {
             || ((runner.name.is_none() && self.name.is_some())
                 || runner
                     .name
-                    .is_some_with(|s| !self.name.contains(&s.as_str())))
+                    .is_some_with(|s| !self.name.contains(&s.as_ref())))
             || ((runner.removal_date.is_none() && self.removal_date.is_some())
                 || runner
                     .removal_date
                     .is_some_with(|s| !self.removal_date.contains(&s.as_str())))
     }
 
-    fn update(&self, runner: &PyRunner, py: Python) -> PyRunner {
+    fn update(&self, runner: &Runner, py: Python) -> Runner {
         let (ex, sp) = if self.status == SelectionStatus::Removed
             || self.status == SelectionStatus::RemovedVacant
         {
@@ -963,7 +963,7 @@ impl<'a> RunnerDefUpdate<'a> {
             (runner.ex.clone_ref(py), runner.sp.clone_ref(py))
         };
 
-        PyRunner {
+        Runner {
             selection_id: runner.selection_id,
             status: self.status,
             adjustment_factor: self.adjustment_factor.or(runner.adjustment_factor),
@@ -979,7 +979,7 @@ impl<'a> RunnerDefUpdate<'a> {
                     if runner.name.contains(&n) {
                         runner.name.clone()
                     } else {
-                        Some(SyncObj::new(Arc::new(String::from(n))))
+                        Some(SyncObj::new(Arc::from(n)))
                     }
                 })
                 .or_else(|| runner.name.clone()),
@@ -1001,7 +1001,7 @@ impl<'a> RunnerDefUpdate<'a> {
         }
     }
 
-    fn update_mut(&self, mut runner: PyRefMut<PyRunner>, py: Python) {
+    fn update_mut(&self, mut runner: PyRefMut<Runner>, py: Python) {
         // maybe wipe ex & sp when removed status detected?
 
         if self.bsp.is_some() {
@@ -1035,7 +1035,7 @@ impl<'a> RunnerDefUpdate<'a> {
             runner.sort_priority = self.sort_priority
         }
         if let Some(n) = self.name && !runner.name.contains(&n) {
-            runner.name = Some(SyncObj::new(Arc::new(String::from(n))));
+            runner.name = Some(SyncObj::new(Arc::from(n)));
         }
         if let Some(n) = self.removal_date &&!runner.removal_date.contains(&n) {
             runner.removal_date = Some(SyncObj::new(DateTimeString::new(n).unwrap()));

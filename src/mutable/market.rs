@@ -8,32 +8,35 @@ use serde_json::value::RawValue;
 use std::collections::VecDeque;
 use std::fmt;
 
-use super::definition::MarketDefinition;
+use super::definition::{MarketDefinition, MarketDefinitionDeser};
 use crate::config::Config;
 use crate::datetime::DateTime;
 use crate::ids::MarketID;
-use crate::mutable::definition::PyMarketDefinition;
-use crate::mutable::runner::{PyRunner, PyRunnerChangeSeq};
+use crate::immutable::container::SyncObj;
+use crate::mutable::runner::{Runner, RunnerChangeSeqDeser};
+use crate::py_rep::PyRep;
 use crate::strings::FixedSizeString;
 
 #[derive(Default)]
 #[pyclass(name = "MarketMut")]
-pub struct PyMarketMut {
-    pub market_id: MarketID,
-    pub clk: FixedSizeString<10>,
+pub struct MarketMut {
+    #[pyo3(get)]
+    pub market_id: SyncObj<MarketID>,
+    #[pyo3(get)]
+    pub clk: SyncObj<FixedSizeString<10>>,
     #[pyo3(get)]
     pub publish_time: DateTime,
     #[pyo3(get)]
     pub total_matched: f64,
     #[pyo3(get)]
-    pub runners: Vec<Py<PyRunner>>,
+    pub runners: Vec<Py<Runner>>,
     def: MarketDefinition,
 }
 
-impl PyMarketMut {
+impl MarketMut {
     fn new(market_id: MarketID) -> Self {
         Self {
-            market_id,
+            market_id: SyncObj::new(market_id),
             clk: Default::default(),
             publish_time: Default::default(),
             total_matched: Default::default(),
@@ -42,26 +45,30 @@ impl PyMarketMut {
         }
     }
 
-    // fn clone(&self, py: Python) -> Self {
-    //     let runners = self
-    //         .runners
-    //         .iter()
-    //         .map(|r| Py::new(py, r.borrow(py).clone(py)).unwrap())
-    //         .collect::<Vec<_>>();
+    fn clone(&self, py: Python) -> Self {
+        let runners = self
+            .runners
+            .iter()
+            .map(|r| Py::new(py, r.borrow(py).clone(py)).unwrap())
+            .collect::<Vec<_>>();
 
-    //     Self {
-    //         market_id: self.market_id,
-    //         publish_time: self.publish_time,
-    //         total_matched: self.total_matched,
-    //         clk: self.clk.clone(),
-    //         def: self.def.clone(),
-    //         runners,
-    //     }
-    // }
+        Self {
+            market_id: self.market_id.clone(),
+            publish_time: self.publish_time,
+            total_matched: self.total_matched,
+            clk: self.clk.clone(),
+            def: self.def.clone(),
+            runners,
+        }
+    }
 }
 
 #[pymethods]
-impl PyMarketMut {
+impl MarketMut {
+    fn copy(&self, py: Python) -> PyObject {
+        self.clone(py).into_py(py)
+    }
+
     #[getter(market_id)]
     fn get_market_id(&self) -> &str {
         self.market_id.as_ref()
@@ -75,8 +82,8 @@ impl PyMarketMut {
         self.def.country_code.as_str()
     }
     #[getter(event_id)]
-    fn get_event_id(&self, py: Python) -> PyObject {
-        self.def.event_id.into_py(py)
+    fn get_event_id(&self) -> u32 {
+        self.def.event_id
     }
     #[getter(event_type_id)]
     fn get_event_type_id(&self, py: Python) -> PyObject {
@@ -172,39 +179,39 @@ impl PyMarketMut {
     }
     #[getter(market_time)]
     fn get_market_time(&self, py: Python) -> PyObject {
-        self.def.market_time.to_object(py)
+        self.def.market_time.py_rep(py)
     }
     #[getter(open_date)]
     fn get_open_date(&self, py: Python) -> PyObject {
-        self.def.open_date.to_object(py)
+        self.def.open_date.py_rep(py)
     }
     #[getter(suspend_time)]
     fn get_suspend_time(&self, py: Python) -> PyObject {
         self.def
             .suspend_time
-            .map(|st| st.to_object(py))
+            .map(|st| st.py_rep(py))
             .unwrap_or_else(|| py.None())
     }
     #[getter(settled_time)]
     fn get_settled_time(&self, py: Python) -> PyObject {
         self.def
             .settled_time
-            .map(|st| st.to_object(py))
+            .map(|st| st.py_rep(py))
             .unwrap_or_else(|| py.None())
     }
     #[getter(regulators)]
     fn get_regulators(&self, py: Python) -> PyObject {
-        self.def.regulators.to_object(py)
+        self.def.regulators.py_rep(py)
     }
 }
 
-pub struct PyMarketToken<'a, 'py> {
-    pub markets: &'a [Py<PyMarketMut>],
+pub struct MarketMutDeser<'a, 'py> {
+    pub markets: &'a [Py<MarketMut>],
     pub py: Python<'py>,
     pub config: Config,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
-    type Value = VecDeque<Py<PyMarketMut>>;
+impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMutDeser<'a, 'py> {
+    type Value = VecDeque<Py<MarketMut>>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -220,12 +227,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
         }
 
         struct PyMarketOuterVisitor<'a, 'py> {
-            markets: &'a [Py<PyMarketMut>],
+            markets: &'a [Py<MarketMut>],
             config: Config,
             py: Python<'py>,
         }
         impl<'de, 'a, 'py> Visitor<'de> for PyMarketOuterVisitor<'a, 'py> {
-            type Value = VecDeque<Py<PyMarketMut>>;
+            type Value = VecDeque<Py<MarketMut>>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -237,7 +244,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
             {
                 let mut pt: Option<DateTime> = None;
                 let mut clk: Option<FixedSizeString<10>> = None;
-                let mut books: VecDeque<Py<PyMarketMut>> = VecDeque::new();
+                let mut books: VecDeque<Py<MarketMut>> = VecDeque::new();
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -248,7 +255,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
                             pt = Some(DateTime::new(map.next_value::<u64>()?));
                         }
                         Field::Mc => {
-                            books = map.next_value_seed(PyMarketMcSeq {
+                            books = map.next_value_seed(PyMarketMcSeqDeser {
                                 markets: self.markets,
                                 config: self.config,
                                 py: self.py,
@@ -264,7 +271,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
                     books.iter_mut().for_each(|mb| {
                         let mut m = mb.borrow_mut(self.py);
                         m.publish_time = pt;
-                        m.clk = clk;
+                        m.clk = SyncObj::new(clk);
                     });
                 }
 
@@ -286,25 +293,25 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketToken<'a, 'py> {
 }
 
 // Used for serializing in place over the marketChange `mc` array
-struct PyMarketMcSeq<'a, 'py> {
-    markets: &'a [Py<PyMarketMut>],
+struct PyMarketMcSeqDeser<'a, 'py> {
+    markets: &'a [Py<MarketMut>],
     config: Config,
     py: Python<'py>,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
-    type Value = VecDeque<Py<PyMarketMut>>;
+impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeqDeser<'a, 'py> {
+    type Value = VecDeque<Py<MarketMut>>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
-        struct PyMarketMcSeqVisitor<'a, 'py> {
-            markets: &'a [Py<PyMarketMut>],
+        struct PyMarketMcSeqDeserVisitor<'a, 'py> {
+            markets: &'a [Py<MarketMut>],
             config: Config,
             py: Python<'py>,
         }
-        impl<'de, 'a, 'py> Visitor<'de> for PyMarketMcSeqVisitor<'a, 'py> {
-            type Value = VecDeque<Py<PyMarketMut>>;
+        impl<'de, 'a, 'py> Visitor<'de> for PyMarketMcSeqDeserVisitor<'a, 'py> {
+            type Value = VecDeque<Py<MarketMut>>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -321,7 +328,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
                 }
 
                 // TODO what should we do if a market appears twice in a mc
-                let mut next_books: VecDeque<Py<PyMarketMut>> = VecDeque::new();
+                let mut next_books: VecDeque<Py<MarketMut>> = VecDeque::new();
 
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deserializer = serde_json::Deserializer::from_str(raw.get());
@@ -352,7 +359,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
             }
         }
 
-        deserializer.deserialize_seq(PyMarketMcSeqVisitor {
+        deserializer.deserialize_seq(PyMarketMcSeqDeserVisitor {
             markets: self.markets,
             config: self.config,
             py: self.py,
@@ -363,13 +370,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeq<'a, 'py> {
 // Used for serializing in place over the marketChange `mc` objects
 struct PyMarketMc<'py> {
     mid: MarketID,
-    market: Option<Py<PyMarketMut>>,
+    market: Option<Py<MarketMut>>,
     config: Config,
     py: Python<'py>,
     img: bool,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
-    type Value = Option<Py<PyMarketMut>>;
+    type Value = Option<Py<MarketMut>>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -392,13 +399,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
 
         struct PyMarketMcVisitor<'py> {
             mid: MarketID,
-            market: Option<Py<PyMarketMut>>,
+            market: Option<Py<MarketMut>>,
             config: Config,
             img: bool,
             py: Python<'py>,
         }
         impl<'de, 'py> Visitor<'de> for PyMarketMcVisitor<'py> {
-            type Value = Option<Py<PyMarketMut>>;
+            type Value = Option<Py<MarketMut>>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -410,7 +417,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
             {
                 let market = self
                     .market
-                    .unwrap_or_else(|| Py::new(self.py, PyMarketMut::new(self.mid)).unwrap());
+                    .unwrap_or_else(|| Py::new(self.py, MarketMut::new(self.mid)).unwrap());
 
                 {
                     let m = &mut *market.borrow_mut(self.py);
@@ -418,7 +425,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
                     while let Some(key) = map.next_key()? {
                         match key {
                             Field::MarketDefinition => {
-                                map.next_value_seed(PyMarketDefinition {
+                                map.next_value_seed(MarketDefinitionDeser {
                                     def: &mut m.def,
                                     runners: &mut m.runners,
                                     config: self.config,
@@ -427,7 +434,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
                                 })?;
                             }
                             Field::Rc => {
-                                map.next_value_seed(PyRunnerChangeSeq {
+                                map.next_value_seed(RunnerChangeSeqDeser {
                                     runners: &mut m.runners,
                                     img: self.img,
                                     config: self.config,
@@ -488,7 +495,7 @@ mod tests {
 
     #[test]
     fn test_multiple_markets() {
-        let mut m = PyMarketMut::new("".to_owned(), "".to_owned());
+        let mut m = MarketMut::new("".to_owned(), "".to_owned());
         let py = unsafe { Python::assume_gil_acquired() };
 
         let config = Config{cumulative_runner_tv: true, stable_runner_index: false};

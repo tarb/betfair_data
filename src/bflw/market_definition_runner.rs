@@ -1,18 +1,15 @@
 use core::fmt;
-use std::sync::Arc;
 use pyo3::{prelude::*, types::PyList};
 use serde::{
     de::{DeserializeSeed, Visitor},
     Deserialize, Deserializer,
 };
+use std::sync::Arc;
 
 use super::{float_str::FloatStr, runner_book::RunnerBook};
 use crate::{
-    enums::SelectionStatus,
-    ids::SelectionID,
-    immutable::container::{PyRep, SyncObj},
-    datetime::DateTimeString,
-    market_source::SourceConfig,
+    datetime::DateTimeString, enums::SelectionStatus, ids::SelectionID,
+    immutable::container::SyncObj, market_source::SourceConfig, py_rep::PyRep,
 };
 
 /*
@@ -36,7 +33,7 @@ pub struct MarketDefinitionRunner {
     #[pyo3(get)]
     status: SelectionStatus,
     #[pyo3(get)]
-    name: Option<SyncObj<Arc<String>>>,
+    name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
     handicap: FloatStr,
     #[pyo3(get)]
@@ -65,7 +62,7 @@ impl MarketDefinitionRunner {
             handicap: change.hc.unwrap_or(FloatStr(0.0)),
             bsp: change.bsp,
             sort_priority: change.sort_priority,
-            name: change.name.map(|s| SyncObj::new(Arc::new(String::from(s)))),
+            name: change.name.map(|s| SyncObj::new(Arc::from(s))),
             removal_date: change
                 .removal_date
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
@@ -81,7 +78,7 @@ impl MarketDefinitionRunner {
             || ((self.name.is_none() && change.name.is_some())
                 || self
                     .name
-                    .is_some_with(|s| !change.name.contains(&s.as_str())))
+                    .is_some_with(|s| !change.name.contains(&s.as_ref())))
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
                     .removal_date
@@ -107,7 +104,7 @@ impl MarketDefinitionRunner {
                     if self.name.contains(&n) {
                         self.name.clone()
                     } else {
-                        Some(SyncObj::new(Arc::new(String::from(n))))
+                        Some(SyncObj::new(Arc::from(n)))
                     }
                 })
                 .or_else(|| self.name.clone()),
@@ -148,7 +145,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
     where
         D: Deserializer<'de>,
     {
-        struct RunnerSeqVisitor<'a, 'py>{
+        struct RunnerSeqVisitor<'a, 'py> {
             defs: Option<&'a Vec<Py<MarketDefinitionRunner>>>,
             books: Option<&'a Vec<Py<RunnerBook>>>,
             py: Python<'py>,
@@ -215,8 +212,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                                 10,
                                             ));
                                             defs.push(
-                                                Py::new(self.py, runner.update_from_change(&change))
-                                                    .unwrap(),
+                                                Py::new(
+                                                    self.py,
+                                                    runner.update_from_change(&change),
+                                                )
+                                                .unwrap(),
                                             );
                                             Some(defs)
                                         };
@@ -281,9 +281,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             if runner.would_change(&change, self.py) {
                                 match books.as_mut() {
                                     Some(defs) => {
-                                        defs[index] =
-                                            Py::new(self.py, runner.update_from_def(&change, self.py))
-                                                .unwrap()
+                                        defs[index] = Py::new(
+                                            self.py,
+                                            runner.update_from_def(&change, self.py),
+                                        )
+                                        .unwrap()
                                     }
                                     None => {
                                         books = Some(
@@ -293,7 +295,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                                     if index == i {
                                                         Py::new(
                                                             self.py,
-                                                            runner.update_from_def(&change, self.py),
+                                                            runner
+                                                                .update_from_def(&change, self.py),
                                                         )
                                                         .unwrap()
                                                     } else {
@@ -345,6 +348,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
             }
         }
 
-        deserializer.deserialize_seq(RunnerSeqVisitor{defs: self.defs, books: self.books, py: self.py, config: self.config})
+        deserializer.deserialize_seq(RunnerSeqVisitor {
+            defs: self.defs,
+            books: self.books,
+            py: self.py,
+            config: self.config,
+        })
     }
 }

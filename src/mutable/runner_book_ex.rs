@@ -1,9 +1,9 @@
 use pyo3::{prelude::*};
 use crate::price_size::PriceSize;
 
-#[pyclass(name = "RunnerBookEX")]
+#[pyclass(name = "RunnerBookEXMut")]
 #[derive(Default, Clone)]
-pub struct PyRunnerBookEX {
+pub struct RunnerBookEXMut {
     #[pyo3(get)]
     pub available_to_back: Vec<PriceSize>,
     #[pyo3(get)]

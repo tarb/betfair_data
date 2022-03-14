@@ -1,9 +1,9 @@
 use pyo3::{prelude::*};
 use crate::price_size::PriceSize;
 
-#[pyclass(name = "RunnerBookSP")]
+#[pyclass(name = "RunnerBookSPMut")]
 #[derive(Default, Clone)]
-pub struct PyRunnerBookSP {
+pub struct RunnerBookSPMut {
     #[pyo3(get)]
     pub far_price: Option<f64>,
     #[pyo3(get)]

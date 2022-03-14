@@ -39,7 +39,7 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub market_time: SyncObj<DateTimeString>,
     #[pyo3(get)]
-    pub market_type: SyncObj<Arc<String>>,
+    pub market_type: SyncObj<Arc<str>>,
     #[pyo3(get)]
     pub number_of_active_runners: u16,
     #[pyo3(get)]
@@ -61,19 +61,19 @@ pub struct MarketDefinition {
     #[pyo3(get)]
     pub suspend_time: Option<SyncObj<DateTimeString>>,
     #[pyo3(get)]
-    pub timezone: SyncObj<Arc<String>>,
+    pub timezone: SyncObj<Arc<str>>,
     #[pyo3(get)]
     pub turn_in_play_enabled: bool,
     #[pyo3(get)]
-    pub venue: Option<SyncObj<Arc<String>>>,
+    pub venue: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
     pub version: u64,
     #[pyo3(get)]
     pub country_code: Option<SyncObj<FixedSizeString<2>>>,
     #[pyo3(get)]
-    pub name: Option<SyncObj<Arc<String>>>,
+    pub name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
-    pub event_name: Option<SyncObj<Arc<String>>>,
+    pub event_name: Option<SyncObj<Arc<str>>>,
 
     // use getters to turn these into strings
     pub event_id: EventID,
@@ -168,15 +168,15 @@ impl MarketDefinition {
                 .unwrap(),
             market_type: change
                 .market_type
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap(),
             timezone: change
                 .timezone
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap(),
             venue: change
                 .venue
-                .map(|s| SyncObj::new(Arc::new(String::from(s)))),
+                .map(|s| SyncObj::new(Arc::from(s))),
             country_code: change
                 .country_code
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap())), // todo
@@ -190,10 +190,10 @@ impl MarketDefinition {
             suspend_time: change
                 .suspend_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
-            name: change.name.map(|s| SyncObj::new(Arc::new(s.into_owned()))),
+            name: change.name.map(|s| SyncObj::new(Arc::from(s.into_owned()))),
             event_name: change
                 .event_name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned()))),
+                .map(|s| SyncObj::new(Arc::from(s.into_owned()))),
         }
     }
     fn update_from_change(&self, change: MarketDefinitionUpdate) -> Self {
@@ -228,7 +228,7 @@ impl MarketDefinition {
                 .unwrap_or_else(|| self.market_time.clone()),
             market_type: change
                 .market_type
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap_or_else(|| self.market_type.clone()),
             regulators: change
                 .regulators
@@ -236,11 +236,11 @@ impl MarketDefinition {
                 .unwrap_or_else(|| self.regulators.clone()),
             timezone: change
                 .timezone
-                .map(|s| SyncObj::new(Arc::new(String::from(s))))
+                .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap_or_else(|| self.timezone.clone()),
             venue: change
                 .venue
-                .map(|s| Some(SyncObj::new(Arc::new(String::from(s)))))
+                .map(|s| Some(SyncObj::new(Arc::from(s))))
                 .unwrap_or_else(|| self.venue.clone()),
             country_code: change
                 .country_code
@@ -260,11 +260,11 @@ impl MarketDefinition {
                 .or_else(|| self.suspend_time.clone()),
             name: change
                 .name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned())))
+                .map(|s| SyncObj::new(Arc::from(s.into_owned())))
                 .or_else(|| self.name.clone()),
             event_name: change
                 .event_name
-                .map(|s| SyncObj::new(Arc::new(s.into_owned())))
+                .map(|s| SyncObj::new(Arc::from(s.into_owned())))
                 .or_else(|| self.event_name.clone()),
             runners: change
                 .runners
@@ -449,7 +449,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let timezone = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.timezone.as_str() != timezone)
+                                .is_some_with(|def| def.timezone.as_ref() != timezone)
                                 || self.def.is_none()
                             {
                                 upt.timezone = Some(timezone);
@@ -602,7 +602,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let market_type = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.market_type.as_str() != market_type)
+                                .is_some_with(|def| def.market_type.as_ref() != market_type)
                                 || self.def.is_none()
                             {
                                 upt.market_type = Some(market_type);

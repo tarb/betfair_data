@@ -6,7 +6,7 @@ import logging
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)s %(name)s %(message)s')
 
-mutable = True
+mutable = False
 paths = [
     "data/2021_10_OctRacingAUPro.tar",
     "data/2021_11_NovRacingAUPro.tar",

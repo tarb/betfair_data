@@ -9,7 +9,7 @@ use std::fmt;
 use crate::datetime::DateTimeString;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::ids::{EventID, EventTypeID};
-use crate::mutable::runner::{PyRunner, PyRunnerDefSeq};
+use crate::mutable::runner::{Runner, RunnerDefSeqDeser};
 use crate::strings::{FixedSizeString, StringSetExtNeq};
 use crate::config::Config;
 
@@ -48,14 +48,14 @@ pub struct MarketDefinition {
 }
 
 // Used for serializing in place over the mc marketDefinition object
-pub struct PyMarketDefinition<'a, 'py> {
+pub struct MarketDefinitionDeser<'a, 'py> {
     pub def: &'a mut MarketDefinition,
-    pub runners: &'a mut Vec<Py<PyRunner>>,
+    pub runners: &'a mut Vec<Py<Runner>>,
     pub config: Config,
     pub img: bool,
     pub py: Python<'py>,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
+impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -104,14 +104,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
             Version,
         }
 
-        struct PyMarketDefinitionVisitor<'a, 'py> {
+        struct MarketDefinitionVisitorDeser<'a, 'py> {
             def: &'a mut MarketDefinition,
-            runners: &'a mut Vec<Py<PyRunner>>,
+            runners: &'a mut Vec<Py<Runner>>,
             config: Config,
             img: bool,
             py: Python<'py>,
         }
-        impl<'de, 'a, 'py> Visitor<'de> for PyMarketDefinitionVisitor<'a, 'py> {
+        impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitorDeser<'a, 'py> {
             type Value = ();
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
@@ -178,7 +178,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
                                 .map_err(de::Error::custom)?;
                         }
                         Field::Version => self.def.version = map.next_value()?,
-                        Field::Runners => map.next_value_seed(PyRunnerDefSeq {
+                        Field::Runners => map.next_value_seed(RunnerDefSeqDeser {
                             runners: self.runners,
                             config: self.config,
                             img: self.img,
@@ -297,7 +297,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketDefinition<'a, 'py> {
         deserializer.deserialize_struct(
             "MarketDefinition",
             FIELDS,
-            PyMarketDefinitionVisitor {
+            MarketDefinitionVisitorDeser {
                 def: self.def,
                 runners: self.runners,
                 config: self.config,

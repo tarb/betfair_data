@@ -6,7 +6,7 @@ use pyo3::prelude::*;
 use crate::config::Config;
 use crate::file_iter::{FileIter, IntoMarketIter, MarketID};
 use crate::market_source::{Adapter, MarketSource, SourceConfig, SourceItem};
-use crate::mutable::market::{PyMarketMut, PyMarketToken};
+use crate::mutable::market::{MarketMut, MarketMutDeser};
 
 #[pyclass]
 pub struct MutAdapter {
@@ -34,7 +34,7 @@ impl MutAdapter {
 
 #[pyclass(name = "File")]
 pub struct File {
-    inner: FileIter<PyMarketMut, MutableRep>,
+    inner: FileIter<MarketMut, MutableRep>,
 }
 
 #[pymethods]
@@ -63,22 +63,22 @@ impl From<(SourceItem, SourceConfig)> for File {
 
 pub struct MutableRep();
 impl IntoMarketIter for MutableRep {
-    type Market = PyMarketMut;
-    type Deser<'a, 'de, 'py> = PyMarketToken<'a, 'py>;
+    type Market = MarketMut;
+    type Deser<'a, 'de, 'py> = MarketMutDeser<'a, 'py>;
 
     fn new<'a, 'de, 'py>(
         books: &'a [Py<Self::Market>],
         py: Python<'py>,
         config: Config,
     ) -> Self::Deser<'a, 'de, 'py> {
-        PyMarketToken {
+        MarketMutDeser {
             markets: books,
             py,
             config,
         }
     }
 }
-impl MarketID for PyMarketMut {
+impl MarketID for MarketMut {
     fn id(&self) -> &str {
         self.market_id.as_str()
     }

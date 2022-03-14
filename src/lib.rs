@@ -26,6 +26,7 @@ mod immutable;
 mod market_source;
 mod mutable;
 mod price_size;
+mod py_rep;
 mod strings;
 mod tarbz2_source;
 
@@ -39,8 +40,8 @@ use bflw::market_book::MarketBook;
 use bflw::market_definition::MarketDefinition;
 use bflw::market_definition_runner::MarketDefinitionRunner;
 use bflw::runner_book::RunnerBook;
-use immutable::market::PyMarket;
-use immutable::runner::PyRunner;
+use immutable::market::Market;
+use immutable::runner::Runner;
 use immutable::runner_book_ex::RunnerBookEX;
 use immutable::runner_book_sp::RunnerBookSP;
 use pyo3::prelude::*;
@@ -60,8 +61,8 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<TarBz2>()?;
     m.add_class::<File>()?;
     m.add_class::<PriceSize>()?;
-    m.add_class::<PyMarket>()?;
-    m.add_class::<PyRunner>()?;
+    m.add_class::<Market>()?;
+    m.add_class::<Runner>()?;
     m.add_class::<RunnerBookEX>()?;
     m.add_class::<RunnerBookSP>()?;
 

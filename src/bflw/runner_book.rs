@@ -9,14 +9,15 @@ use super::market_definition_runner::MarketDefRunnerUpdate;
 use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
 use crate::bflw::float_str::FloatStr;
 use crate::bflw::RoundToCents;
+use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
-use crate::immutable::container::{PyRep, SyncObj};
-use crate::datetime::DateTimeString;
+use crate::immutable::container::SyncObj;
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
 use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
 use crate::market_source::SourceConfig;
 use crate::price_size::{F64OrStr, PriceSize};
+use crate::py_rep::PyRep;
 
 #[pyclass]
 pub struct RunnerBook {

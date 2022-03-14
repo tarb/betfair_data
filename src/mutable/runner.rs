@@ -8,15 +8,16 @@ use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::config::Config;
+use crate::immutable::container::SyncObj;
 use crate::mutable::price_size::{PriceSizeBackLadder, PriceSizeLayLadder};
 use crate::price_size::F64OrStr;
 use crate::strings::StringSetExtNeq;
 
-use super::runner_book_ex::PyRunnerBookEX;
-use super::runner_book_sp::PyRunnerBookSP;
+use super::runner_book_ex::RunnerBookEXMut;
+use super::runner_book_sp::RunnerBookSPMut;
 
-#[pyclass(name = "Runner")]
-pub struct PyRunner {
+#[pyclass(name = "RunnerMut")]
+pub struct Runner {
     #[pyo3(get)]
     pub status: SelectionStatus,
     #[pyo3(get)]
@@ -32,21 +33,21 @@ pub struct PyRunner {
     #[pyo3(get)]
     pub handicap: Option<f64>,
     #[pyo3(get)]
-    pub ex: Py<PyRunnerBookEX>,
+    pub ex: Py<RunnerBookEXMut>,
     #[pyo3(get)]
-    pub sp: Py<PyRunnerBookSP>,
+    pub sp: Py<RunnerBookSPMut>,
     #[pyo3(get)]
     pub sort_priority: u16,
-    // #[pyo3(get)]
-    pub removal_date: Option<DateTimeString>,
+    #[pyo3(get)]
+    pub removal_date: Option<SyncObj<DateTimeString>>,
 }
 
-impl PyRunner {
+impl Runner {
     fn new(py: Python) -> Self {
-        let ex: PyRunnerBookEX = Default::default();
-        let sp: PyRunnerBookSP = Default::default();
+        let ex: RunnerBookEXMut = Default::default();
+        let sp: RunnerBookSPMut = Default::default();
 
-        PyRunner {
+        Runner {
             selection_id: Default::default(),
             status: Default::default(),
             name: Default::default(),
@@ -62,8 +63,8 @@ impl PyRunner {
     }
 
     pub fn clone(&self, py: Python) -> Self {
-        let ex: PyRunnerBookEX = self.ex.borrow(py).clone();
-        let sp: PyRunnerBookSP = self.sp.borrow(py).clone();
+        let ex: RunnerBookEXMut = self.ex.borrow(py).clone();
+        let sp: RunnerBookSPMut = self.sp.borrow(py).clone();
 
         Self {
             selection_id: self.selection_id,
@@ -74,20 +75,20 @@ impl PyRunner {
             adjustment_factor: self.adjustment_factor,
             handicap: self.handicap,
             sort_priority: self.sort_priority,
-            removal_date: self.removal_date,
+            removal_date: self.removal_date.clone(),
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
         }
     }
 }
 
-pub struct PyRunnerDefSeq<'a, 'py> {
-    pub runners: &'a mut Vec<Py<PyRunner>>,
+pub struct RunnerDefSeqDeser<'a, 'py> {
+    pub runners: &'a mut Vec<Py<Runner>>,
     pub config: Config,
     pub img: bool,
     pub py: Python<'py>,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
+impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeqDeser<'a, 'py> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -95,7 +96,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
         D: Deserializer<'de>,
     {
         struct RunnerSeqVisitor<'a, 'py> {
-            runners: &'a mut Vec<Py<PyRunner>>,
+            runners: &'a mut Vec<Py<Runner>>,
             config: Config,
             img: bool,
             py: Python<'py>,
@@ -145,7 +146,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                         Some(index) => {
                             let mut runner =
                                 unsafe { self.runners.get_unchecked(index).borrow_mut(self.py) };
-                            PyRunnerDefinitonDeser {
+                            RunnerDefinitonDeser {
                                 runner: &mut runner,
                                 config: self.config,
                                 img: self.img,
@@ -155,8 +156,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
                             .map_err(Error::custom)?
                         }
                         None => {
-                            let mut runner = PyRunner::new(self.py);
-                            PyRunnerDefinitonDeser {
+                            let mut runner = Runner::new(self.py);
+                            RunnerDefinitonDeser {
                                 runner: &mut runner,
                                 config: self.config,
                                 img: self.img,
@@ -190,13 +191,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefSeq<'a, 'py> {
     }
 }
 
-struct PyRunnerDefinitonDeser<'a, 'py> {
-    pub runner: &'a mut PyRunner,
+struct RunnerDefinitonDeser<'a, 'py> {
+    pub runner: &'a mut Runner,
     pub config: Config,
     pub img: bool,
     pub py: Python<'py>,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
+impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefinitonDeser<'a, 'py> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -217,7 +218,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
         }
 
         struct RunnerDefVisitor<'a, 'py> {
-            runner: &'a mut PyRunner,
+            runner: &'a mut Runner,
             _config: Config,
             _img: bool,
             py: Python<'py>,
@@ -253,7 +254,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
                             if self.runner.removal_date.contains(&s) {
                                 let dt = DateTimeString::new(s).map_err(Error::custom)?;
 
-                                self.runner.removal_date = Some(dt);
+                                self.runner.removal_date = Some(SyncObj::new(dt));
                             }
                         }
                         Field::Bsp => {
@@ -289,13 +290,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerDefinitonDeser<'a, 'py> {
     }
 }
 
-pub struct PyRunnerChangeSeq<'a, 'py> {
-    pub runners: &'a mut Vec<Py<PyRunner>>,
+pub struct RunnerChangeSeqDeser<'a, 'py> {
+    pub runners: &'a mut Vec<Py<Runner>>,
     pub config: Config,
     pub img: bool,
     pub py: Python<'py>,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
+impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeqDeser<'a, 'py> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -303,7 +304,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
         D: Deserializer<'de>,
     {
         struct RunnerSeqVisitor<'a, 'py> {
-            runners: &'a mut Vec<Py<PyRunner>>,
+            runners: &'a mut Vec<Py<Runner>>,
             config: Config,
             img: bool,
             py: Python<'py>,
@@ -346,7 +347,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
                         Some(index) => {
                             let mut runner =
                                 unsafe { self.runners.get_unchecked(index).borrow_mut(self.py) };
-                            PyRunnerChangeDeser {
+                            RunnerChangeDeser {
                                 runner: &mut runner,
                                 img: self.img,
                                 config: self.config,
@@ -356,8 +357,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
                             .map_err(Error::custom)?;
                         }
                         None => {
-                            let mut runner = PyRunner::new(self.py);
-                            PyRunnerChangeDeser {
+                            let mut runner = Runner::new(self.py);
+                            RunnerChangeDeser {
                                 runner: &mut runner,
                                 config: self.config,
                                 img: self.img,
@@ -384,13 +385,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeSeq<'a, 'py> {
     }
 }
 
-struct PyRunnerChangeDeser<'a, 'py> {
-    pub runner: &'a mut PyRunner,
+struct RunnerChangeDeser<'a, 'py> {
+    pub runner: &'a mut Runner,
     pub config: Config,
     pub img: bool,
     pub py: Python<'py>,
 }
-impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
+impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'a, 'py> {
     type Value = ();
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
@@ -414,7 +415,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyRunnerChangeDeser<'a, 'py> {
         }
 
         struct RunnerChangeVisitor<'a, 'py> {
-            runner: &'a mut PyRunner,
+            runner: &'a mut Runner,
             config: Config,
             img: bool,
             py: Python<'py>,

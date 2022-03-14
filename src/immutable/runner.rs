@@ -6,24 +6,25 @@ use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 use std::sync::Arc;
 
-use super::container::{PyRep, SyncObj};
+use super::container::SyncObj;
+use super::runner_book_ex::RunnerBookEX;
+use super::runner_book_sp::RunnerBookSP;
+use crate::config::Config;
 use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
-use crate::config::Config;
 use crate::price_size::{F64OrStr, PriceSize};
-use super::runner_book_ex::RunnerBookEX;
-use super::runner_book_sp::RunnerBookSP;
+use crate::py_rep::PyRep;
 
 #[pyclass(name = "Runner")]
-pub struct PyRunner {
+pub struct Runner {
     #[pyo3(get)]
     pub status: SelectionStatus,
     #[pyo3(get)]
     pub selection_id: SelectionID,
     #[pyo3(get)]
-    pub name: Option<SyncObj<Arc<String>>>,
+    pub name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
     pub last_price_traded: Option<f64>,
     #[pyo3(get)]
@@ -42,49 +43,36 @@ pub struct PyRunner {
     pub removal_date: Option<SyncObj<DateTimeString>>,
 }
 
-// pub struct RunnerDefUpdate<'a> {
-//     id: SelectionID,
-//     adjustment_factor: Option<f64>,
-//     status: SelectionStatus,
-//     sort_priority: u16,
-//     name: Option<&'a str>,
-//     bsp: Option<F64OrStr>,
-//     removal_date: Option<&'a str>,
-//     hc: Option<F64OrStr>,
-// }
-
-impl PyRunner {}
-
-impl PyRep for Vec<Py<PyRunner>> {
+impl PyRep for Vec<Py<Runner>> {
     fn py_rep(&self, py: Python) -> PyObject {
         PyList::new(py, self.iter().map(|ps| ps.into_py(py))).into_py(py)
     }
 }
 
 pub struct RunnerChangeSeq<'a, 'py> {
-    pub runners: Option<&'a [Py<PyRunner>]>,
-    pub next: Option<Vec<Py<PyRunner>>>,
+    pub runners: Option<&'a [Py<Runner>]>,
+    pub next: Option<Vec<Py<Runner>>>,
     pub py: Python<'py>,
     pub image: bool,
     pub config: Config,
 }
 
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
-    type Value = Option<Vec<Py<PyRunner>>>;
+    type Value = Option<Vec<Py<Runner>>>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
     {
         struct RunnerSeqVisitor<'a, 'py> {
-            runners: Option<&'a [Py<PyRunner>]>,
-            next: Option<Vec<Py<PyRunner>>>,
+            runners: Option<&'a [Py<Runner>]>,
+            next: Option<Vec<Py<Runner>>>,
             py: Python<'py>,
             image: bool,
             config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
-            type Value = Option<Vec<Py<PyRunner>>>;
+            type Value = Option<Vec<Py<Runner>>>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -162,13 +150,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 }
 
 struct RunnerChangeDeser<'py> {
-    runner: Option<PyRef<'py, PyRunner>>,
+    runner: Option<PyRef<'py, Runner>>,
     py: Python<'py>,
     image: bool,
     config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
-    type Value = PyRunner;
+    type Value = Runner;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -191,13 +179,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
         }
 
         struct RunnerChangeVisitor<'py> {
-            runner: Option<PyRef<'py, PyRunner>>,
+            runner: Option<PyRef<'py, Runner>>,
             py: Python<'py>,
             image: bool,
             config: Config,
         }
         impl<'de, 'py> Visitor<'de> for RunnerChangeVisitor<'py> {
-            type Value = PyRunner;
+            type Value = Runner;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
@@ -328,7 +316,7 @@ struct RunnerChangeUpdate {
 }
 
 impl RunnerChangeUpdate {
-    fn create(self, py: Python) -> PyRunner {
+    fn create(self, py: Python) -> Runner {
         let ex = Py::new(
             py,
             RunnerBookEX {
@@ -351,7 +339,7 @@ impl RunnerChangeUpdate {
         )
         .unwrap();
 
-        PyRunner {
+        Runner {
             status: SelectionStatus::default(),
             selection_id: self.id,
             name: None,
@@ -366,7 +354,7 @@ impl RunnerChangeUpdate {
         }
     }
 
-    fn update(self, runner: PyRef<PyRunner>, image: bool, py: Python) -> PyRunner {
+    fn update(self, runner: PyRef<Runner>, image: bool, py: Python) -> Runner {
         let ex = if self.atb.is_some() || self.atl.is_some() || self.trd.is_some() {
             let ex = runner.ex.borrow(py);
             Py::new(
@@ -448,7 +436,7 @@ impl RunnerChangeUpdate {
                 runner.sp.clone_ref(py)
             };
 
-        PyRunner {
+        Runner {
             status: runner.status,
             selection_id: self.id,
             name: runner.name.clone(),

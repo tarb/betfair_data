@@ -3,13 +3,13 @@ use std::path::{Path, PathBuf};
 
 use crate::file_iter::FileIter;
 use crate::immutable::file_iter::ImmutableRep;
-use crate::immutable::market::PyMarket;
+use crate::immutable::market::Market;
 use crate::mutable::file_iter::MutableRep;
-use crate::mutable::market::PyMarketMut;
+use crate::mutable::market::MarketMut;
 
 enum FileType {
-    Mutable(FileIter<PyMarketMut, MutableRep>),
-    Immutable(FileIter<PyMarket, ImmutableRep>),
+    Mutable(FileIter<MarketMut, MutableRep>),
+    Immutable(FileIter<Market, ImmutableRep>),
 }
 
 #[pyclass(name = "File")]
