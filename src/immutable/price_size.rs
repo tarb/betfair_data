@@ -85,7 +85,6 @@ impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeLayLadder<'a> {
             where
                 A: serde::de::SeqAccess<'de>,
             {
-
                 let mut v = match self.0 {
                     Some(ps) => {
                         let mut v = Vec::with_capacity(std::cmp::min(ps.len() + 5, 350));
@@ -94,7 +93,7 @@ impl<'de, 'a> DeserializeSeed<'de> for ImmutablePriceSizeLayLadder<'a> {
                     }
                     None => Vec::with_capacity(10),
                 };
-                
+
                 while let Some(ps1) = seq.next_element::<PriceSize>()? {
                     let cmp_fn = |ps2: &PriceSize| {
                         if ps1.price < ps2.price {

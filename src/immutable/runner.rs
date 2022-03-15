@@ -53,7 +53,6 @@ pub struct RunnerChangeSeq<'a, 'py> {
     pub runners: Option<&'a [Py<Runner>]>,
     pub next: Option<Vec<Py<Runner>>>,
     pub py: Python<'py>,
-    pub image: bool,
     pub config: Config,
 }
 
@@ -68,7 +67,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             runners: Option<&'a [Py<Runner>]>,
             next: Option<Vec<Py<Runner>>>,
             py: Python<'py>,
-            image: bool,
             config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
@@ -112,7 +110,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
                                     next_runners.get_unchecked(index).borrow(self.py)
                                 }),
                                 py: self.py,
-                                image: self.image,
                                 config: self.config,
                             }
                             .deserialize(&mut deser)
@@ -124,7 +121,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
                             let runner = RunnerChangeDeser {
                                 runner: None,
                                 py: self.py,
-                                image: self.image,
                                 config: self.config,
                             }
                             .deserialize(&mut deser)
@@ -143,7 +139,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             runners: self.runners,
             next: self.next,
             py: self.py,
-            image: self.image,
             config: self.config,
         })
     }
@@ -152,7 +147,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 struct RunnerChangeDeser<'py> {
     runner: Option<PyRef<'py, Runner>>,
     py: Python<'py>,
-    image: bool,
     config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
@@ -181,7 +175,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
         struct RunnerChangeVisitor<'py> {
             runner: Option<PyRef<'py, Runner>>,
             py: Python<'py>,
-            image: bool,
             config: Config,
         }
         impl<'de, 'py> Visitor<'de> for RunnerChangeVisitor<'py> {
@@ -204,50 +197,38 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
                         }
                         Field::Atb => {
                             let ex = self.runner.as_ref().map(|r| r.ex.borrow(self.py));
-                            let atb = ex
-                                .as_ref()
-                                .and_then(|ex| (!self.image).then(|| &ex.available_to_back))
-                                .map(|atb| (**atb).as_slice());
+                            let atb = ex.as_ref().map(|ex| ex.available_to_back.as_slice());
 
                             upt.atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(atb))?);
                         }
                         Field::Atl => {
                             let ex = self.runner.as_ref().map(|r| r.ex.borrow(self.py));
-                            let atl = ex
-                                .as_ref()
-                                .and_then(|ex| (!self.image).then(|| &ex.available_to_lay))
-                                .map(|atl| (**atl).as_slice());
+                            let atl = ex.as_ref().map(|ex| ex.available_to_lay.as_slice());
 
                             upt.atl = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(atl))?);
                         }
                         Field::Trd => {
                             let ex = self.runner.as_ref().map(|r| r.ex.borrow(self.py));
-                            let trd = ex
-                                .as_ref()
-                                .and_then(|ex| (!self.image).then(|| &ex.traded_volume))
-                                .map(|trd| (**trd).as_slice());
+                            let trd = ex.as_ref().map(|ex| ex.traded_volume.as_slice());
 
                             let l = map.next_value_seed(ImmutablePriceSizeBackLadder(trd))?;
+
                             if self.config.cumulative_runner_tv {
-                                upt.tv = Some(l.iter().map(|ps| ps.size).sum::<f64>());
+                                upt.tv = Some(l.iter().map(|ps| ps.size).sum());
                             }
 
                             upt.trd = Some(l);
                         }
                         Field::Spb => {
                             let sp = self.runner.as_ref().map(|r| r.sp.borrow(self.py));
-                            let spl = sp
-                                .as_ref()
-                                .and_then(|sp| (!self.image).then(|| &sp.lay_liability_taken))
-                                .map(|spl| (**spl).as_slice());
+                            let spl = sp.as_ref().map(|sp| sp.lay_liability_taken.as_slice());
+
                             upt.spl = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(spl))?);
                         }
                         Field::Spl => {
                             let sp = self.runner.as_ref().map(|r| r.sp.borrow(self.py));
-                            let spb = sp
-                                .as_ref()
-                                .and_then(|sp| (!self.image).then(|| &sp.back_stake_taken))
-                                .map(|spb| (**spb).as_slice());
+                            let spb = sp.as_ref().map(|sp| sp.back_stake_taken.as_slice());
+
                             upt.spb = Some(map.next_value_seed(ImmutablePriceSizeBackLadder(spb))?);
                         }
                         Field::Spn => {
@@ -276,7 +257,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
                 }
 
                 let pr = match self.runner {
-                    Some(r) => upt.update(r, self.image, self.py),
+                    Some(r) => upt.update(r, self.py),
                     None => upt.create(self.py),
                 };
 
@@ -293,14 +274,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
             RunnerChangeVisitor {
                 runner: self.runner,
                 py: self.py,
-                image: self.image,
                 config: self.config,
             },
         )
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct RunnerChangeUpdate {
     id: SelectionID,
     atb: Option<Vec<PriceSize>>,
@@ -343,7 +323,7 @@ impl RunnerChangeUpdate {
             status: SelectionStatus::default(),
             selection_id: self.id,
             name: None,
-            last_price_traded: None,
+            last_price_traded: self.ltp,
             total_matched: self.tv.unwrap_or_default(),
             adjustment_factor: None,
             handicap: self.hc,
@@ -354,7 +334,7 @@ impl RunnerChangeUpdate {
         }
     }
 
-    fn update(self, runner: PyRef<Runner>, image: bool, py: Python) -> Runner {
+    fn update(self, runner: PyRef<Runner>, py: Python) -> Runner {
         let ex = if self.atb.is_some() || self.atl.is_some() || self.trd.is_some() {
             let ex = runner.ex.borrow(py);
             Py::new(
@@ -363,27 +343,15 @@ impl RunnerChangeUpdate {
                     available_to_back: self
                         .atb
                         .map(|atb| SyncObj::new(Arc::new(atb)))
-                        .unwrap_or_else(|| {
-                            image
-                                .then(SyncObj::default)
-                                .unwrap_or_else(|| ex.available_to_back.clone())
-                        }),
+                        .unwrap_or_else(|| ex.available_to_back.clone()),
                     available_to_lay: self
                         .atl
                         .map(|atl| SyncObj::new(Arc::new(atl)))
-                        .unwrap_or_else(|| {
-                            image
-                                .then(SyncObj::default)
-                                .unwrap_or_else(|| ex.available_to_lay.clone())
-                        }),
+                        .unwrap_or_else(|| ex.available_to_lay.clone()),
                     traded_volume: self
                         .trd
                         .map(|trd| SyncObj::new(Arc::new(trd)))
-                        .unwrap_or_else(|| {
-                            image
-                                .then(SyncObj::default)
-                                .unwrap_or_else(|| ex.traded_volume.clone())
-                        }),
+                        .unwrap_or_else(|| ex.traded_volume.clone()),
                 },
             )
             .unwrap()
@@ -399,36 +367,16 @@ impl RunnerChangeUpdate {
                     py,
                     RunnerBookSP {
                         actual_sp: sp.actual_sp,
-                        far_price: self.spf.or({
-                            if !image {
-                                sp.far_price
-                            } else {
-                                None
-                            }
-                        }),
-                        near_price: self.spn.or({
-                            if !image {
-                                sp.near_price
-                            } else {
-                                None
-                            }
-                        }),
+                        far_price: self.spf.or(sp.far_price),
+                        near_price: self.spn.or(sp.near_price),
                         back_stake_taken: self
                             .spb
                             .map(|spb| SyncObj::new(Arc::new(spb)))
-                            .unwrap_or_else(|| {
-                                image
-                                    .then(SyncObj::default)
-                                    .unwrap_or_else(|| sp.back_stake_taken.clone())
-                            }),
+                            .unwrap_or_else(|| sp.back_stake_taken.clone()),
                         lay_liability_taken: self
                             .spl
                             .map(|spl| SyncObj::new(Arc::new(spl)))
-                            .unwrap_or_else(|| {
-                                image
-                                    .then(SyncObj::default)
-                                    .unwrap_or_else(|| sp.lay_liability_taken.clone())
-                            }),
+                            .unwrap_or_else(|| sp.lay_liability_taken.clone()),
                     },
                 )
                 .unwrap()
@@ -440,7 +388,7 @@ impl RunnerChangeUpdate {
             status: runner.status,
             selection_id: self.id,
             name: runner.name.clone(),
-            last_price_traded: runner.last_price_traded,
+            last_price_traded: self.ltp.or(runner.last_price_traded),
             total_matched: self.tv.unwrap_or(runner.total_matched),
             adjustment_factor: runner.adjustment_factor,
             handicap: self.hc.or(runner.handicap),

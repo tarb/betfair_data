@@ -1,5 +1,5 @@
-use std::path::Path;
 use pyo3::prelude::*;
+use std::path::Path;
 
 use super::market::{Market, MarketsDeser};
 use crate::config::Config;

@@ -51,6 +51,7 @@ class Market():
     """Publish Time (in millis since epoch) that the changes were generated"""
     runners_voidable: bool
     runners: List[Runner]   
+    regulators: List[str]
     settled_time: Optional[datetime]
     status: str
     """The markets current status, value is one of ["INACTIVE", "OPEN", "SUSPENDED", "CLOSED"]

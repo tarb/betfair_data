@@ -7,12 +7,12 @@ use std::sync::Arc;
 
 use super::runner_book_ex::RunnerBookEX;
 use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
+use crate::config::Config;
+use crate::datetime::DateTimeString;
 use crate::enums::{MarketBettingType, MarketStatus, SelectionStatus};
 use crate::ids::{EventID, EventTypeID, SelectionID};
 use crate::immutable::container::SyncObj;
-use crate::datetime::DateTimeString;
 use crate::immutable::runner::Runner;
-use crate::config::Config;
 use crate::price_size::F64OrStr;
 use crate::strings::FixedSizeString;
 
@@ -116,10 +116,7 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .market_type
                 .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap(),
-            timezone: self
-                .timezone
-                .map(|s| SyncObj::new(Arc::from(s)))
-                .unwrap(),
+            timezone: self.timezone.map(|s| SyncObj::new(Arc::from(s))).unwrap(),
             venue: self.venue.map(|s| SyncObj::new(Arc::from(s))),
             country_code: self
                 .country_code
@@ -187,7 +184,10 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .timezone
                 .map(|s| SyncObj::new(Arc::from(s)))
                 .unwrap_or_else(|| market.timezone.clone()),
-            venue: self.venue.map(|s| SyncObj::new(Arc::from(s))),
+            venue: self
+                .venue
+                .map(|s| SyncObj::new(Arc::from(s)))
+                .or_else(|| market.venue.clone()),
             country_code: self
                 .country_code
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap()))
@@ -735,6 +735,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
             {
                 match self.next {
                     // if we already have an in progress array to mutate
+                    // this code *may* never run as definitions appear to always come
+                    // before changes - but its better to be robust just in case.
+                    // does mean this code hasnt been properly vetted
                     Some(mut n) => {
                         let mut i: usize = 0;
 
@@ -808,7 +811,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                 (Some((r, ri)), None) => {
                                     let sel = r.borrow(self.py);
 
-                                    // TODO tidy this
                                     if change.diff(&sel, self.py) {
                                         let rs = self.runners.unwrap();
                                         let mut n: Vec<Py<Runner>> =
@@ -850,9 +852,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                 }
 
                                 (None, None) => {
-                                    let mut n: Vec<Py<Runner>> = Vec::with_capacity(12);
+                                    let mut n: Vec<Py<Runner>> = Vec::with_capacity(
+                                        self.runners.map(|n| n.len() + 1).unwrap_or(12),
+                                    );
                                     if let Some(rs) = self.runners {
-                                        for r in &rs[0..1] {
+                                        for r in &rs[0..i] {
                                             n.push(r.clone_ref(self.py));
                                         }
                                     }

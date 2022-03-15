@@ -61,6 +61,10 @@ impl MarketMut {
             runners,
         }
     }
+
+    fn clear(&self, py: Python) {
+        self.runners.iter().for_each(|r| r.borrow_mut(py).clear(py));
+    }
 }
 
 #[pymethods]
@@ -340,12 +344,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeqDeser<'a, 'py> {
                         .find(|m| (*m).borrow(self.py).market_id.as_str() == idimg.id)
                         .map(|m| m.clone_ref(self.py));
 
+                    if idimg.img.contains(&true) && let Some(market) = &market {
+                        market.borrow(self.py).clear(self.py);
+                    }
+
                     let market = PyMarketMc {
                         mid: idimg.id,
                         market,
                         config: self.config,
                         py: self.py,
-                        img: idimg.img.unwrap_or(false),
                     }
                     .deserialize(&mut deserializer)
                     .map_err(Error::custom)?;
@@ -373,7 +380,6 @@ struct PyMarketMc<'py> {
     market: Option<Py<MarketMut>>,
     config: Config,
     py: Python<'py>,
-    img: bool,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
     type Value = Option<Py<MarketMut>>;
@@ -401,7 +407,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
             mid: MarketID,
             market: Option<Py<MarketMut>>,
             config: Config,
-            img: bool,
             py: Python<'py>,
         }
         impl<'de, 'py> Visitor<'de> for PyMarketMcVisitor<'py> {
@@ -429,14 +434,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
                                     def: &mut m.def,
                                     runners: &mut m.runners,
                                     config: self.config,
-                                    img: self.img,
                                     py: self.py,
                                 })?;
                             }
                             Field::Rc => {
                                 map.next_value_seed(RunnerChangeSeqDeser {
                                     runners: &mut m.runners,
-                                    img: self.img,
                                     config: self.config,
                                     py: self.py,
                                 })?;
@@ -478,7 +481,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
                 mid: self.mid,
                 market: self.market,
                 config: self.config,
-                img: self.img,
                 py: self.py,
             },
         )

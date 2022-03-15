@@ -3,13 +3,12 @@ use pyo3::{exceptions, prelude::*};
 use serde::de::DeserializeSeed;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use crate::config::Config;
 use crate::deser::DeserializerWithData;
 use crate::immutable::container::SyncObj;
-use crate::market_source::{SourceItem, SourceConfig};
-
+use crate::market_source::{SourceConfig, SourceItem};
 
 pub trait IntoMarketIter {
     type Market: pyo3::PyClass + MarketID;
@@ -35,11 +34,13 @@ pub struct FileIter<T: pyo3::PyClass + MarketID, I: IntoMarketIter<Market = T>> 
     pd: PhantomData<I>,
 }
 
-impl<T: pyo3::PyClass + MarketID, I: IntoMarketIter<Market = T>> From<(SourceItem, SourceConfig)> for FileIter<T, I> {
+impl<T: pyo3::PyClass + MarketID, I: IntoMarketIter<Market = T>> From<(SourceItem, SourceConfig)>
+    for FileIter<T, I>
+{
     fn from(s: (SourceItem, SourceConfig)) -> Self {
         let (item, config) = s;
 
-        let config = Config { 
+        let config = Config {
             cumulative_runner_tv: config.cumulative_runner_tv,
         };
 

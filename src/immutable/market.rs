@@ -10,8 +10,8 @@ use super::container::SyncObj;
 use super::definition::MarketDefinition;
 use super::runner::Runner;
 use crate::config::Config;
-use crate::ids::MarketID;
 use crate::datetime::DateTime;
+use crate::ids::MarketID;
 use crate::immutable::definition::MarketDefinitionDeser;
 use crate::immutable::runner::RunnerChangeSeq;
 use crate::strings::FixedSizeString;
@@ -288,21 +288,24 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
                     let mid: IdImg = serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
-                    let mb = next_books
-                        .iter()
-                        // search already created markets
-                        .find(|m| (*m).borrow(self.py).market_id.as_str() == mid.id)
-                        // search markets passed in originally
-                        .or_else(|| {
-                            self.markets
+                    let mb = {
+                        if mid.img.contains(&true) {
+                            None
+                        } else {
+                            next_books
                                 .iter()
                                 .find(|m| (*m).borrow(self.py).market_id.as_str() == mid.id)
-                        })
-                        .map(|o| o.borrow(self.py));
+                                .or_else(|| {
+                                    self.markets.iter().find(|m| {
+                                        (*m).borrow(self.py).market_id.as_str() == mid.id
+                                    })
+                                })
+                                .map(|o| o.borrow(self.py))
+                        }
+                    };
 
                     let next_m = MarketMc {
                         id: mid.id,
-                        image: mid.img.contains(&true),
                         market: mb,
                         py: self.py,
                         config: self.config,
@@ -331,7 +334,6 @@ struct MarketMc<'py> {
     id: MarketID,
     market: Option<PyRef<'py, Market>>,
     py: Python<'py>,
-    image: bool,
     config: Config,
 }
 impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
@@ -360,7 +362,6 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
             id: MarketID,
             market: Option<PyRef<'py, Market>>,
             py: Python<'py>,
-            image: bool,
             config: Config,
         }
         impl<'de, 'py> Visitor<'de> for MarketMcVisitor<'py> {
@@ -405,7 +406,6 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                                 runners,
                                 next: next_runners,
                                 py: self.py,
-                                image: self.image,
                                 config: self.config,
                             })?;
 
@@ -477,7 +477,6 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                 id: self.id,
                 market: self.market,
                 py: self.py,
-                image: self.image,
                 config: self.config,
             },
         )

@@ -6,12 +6,12 @@ use serde::{
 use std::borrow::Cow;
 use std::fmt;
 
+use crate::config::Config;
 use crate::datetime::DateTimeString;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::ids::{EventID, EventTypeID};
 use crate::mutable::runner::{Runner, RunnerDefSeqDeser};
 use crate::strings::{FixedSizeString, StringSetExtNeq};
-use crate::config::Config;
 
 #[derive(Default, Clone)]
 pub struct MarketDefinition {
@@ -52,7 +52,6 @@ pub struct MarketDefinitionDeser<'a, 'py> {
     pub def: &'a mut MarketDefinition,
     pub runners: &'a mut Vec<Py<Runner>>,
     pub config: Config,
-    pub img: bool,
     pub py: Python<'py>,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
@@ -108,7 +107,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
             def: &'a mut MarketDefinition,
             runners: &'a mut Vec<Py<Runner>>,
             config: Config,
-            img: bool,
             py: Python<'py>,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitorDeser<'a, 'py> {
@@ -181,7 +179,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::Runners => map.next_value_seed(RunnerDefSeqDeser {
                             runners: self.runners,
                             config: self.config,
-                            img: self.img,
                             py: self.py,
                         })?,
                         Field::MarketType => {
@@ -201,14 +198,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::SuspendTime => {
                             let s = map.next_value::<&str>()?;
-                            if self.def.suspend_time.contains(&s) {
+                            if !self.def.suspend_time.contains(&s) {
                                 let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
                                 self.def.suspend_time = Some(dt);
                             }
                         }
                         Field::SettledTime => {
                             let s = map.next_value::<&str>()?;
-                            if self.def.settled_time.contains(&s) {
+                            if !self.def.settled_time.contains(&s) {
                                 let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
                                 self.def.settled_time = Some(dt);
                             }
@@ -301,7 +298,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                 def: self.def,
                 runners: self.runners,
                 config: self.config,
-                img: self.img,
                 py: self.py,
             },
         )
