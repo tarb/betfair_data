@@ -96,12 +96,12 @@ impl RunnerBook {
     pub fn would_change(&self, change: &MarketDefRunnerUpdate, py: Python) -> bool {
         self.status != change.status
             || self.adjustment_factor != change.adjustment_factor
-            || !change.hc.is_some_with(|h| *h == self.handicap)
+            || !change.hc.is_some_and(|h| *h == self.handicap)
             || (change.bsp.is_some() && self.sp.borrow(py).actual_sp != change.bsp)
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
                     .removal_date
-                    .is_some_with(|s| !change.removal_date.contains(&s.as_str())))
+                    .is_some_and(|s| !change.removal_date.contains(&s.as_str())))
     }
 
     pub fn update_from_def(&self, change: &MarketDefRunnerUpdate, py: Python) -> Self {

@@ -2,6 +2,7 @@ use pyo3::{
     prelude::*,
     types::{PyList, PyUnicode},
 };
+use staticvec::StaticString;
 use std::path::PathBuf;
 
 use crate::{price_size::PriceSize, strings::FixedSizeString};
@@ -35,6 +36,12 @@ impl PyRep for PathBuf {
 }
 
 impl<const N: usize> PyRep for FixedSizeString<N> {
+    fn py_rep(&self, py: Python) -> PyObject {
+        PyUnicode::new(py, self.as_str()).into_py(py)
+    }
+}
+
+impl<const N: usize> PyRep for StaticString<N> {
     fn py_rep(&self, py: Python) -> PyObject {
         PyUnicode::new(py, self.as_str()).into_py(py)
     }

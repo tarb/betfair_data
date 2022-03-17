@@ -1,8 +1,8 @@
+from typing import Sequence
 import tarfile
 import bz2
-from typing import Sequence
-import betfair_data
 import logging
+import betfair_data as bfd
 from betfair_data import bflw
 
 logging.basicConfig(level=logging.WARN, format='%(levelname)s %(name)s %(message)s')
@@ -15,23 +15,18 @@ paths = [
 
 
 def run_with_py_loading():
-    market_count = 0
-    update_count = 0
-
     def load_tar(file_paths: Sequence[str]):
         for file_path in file_paths:
             with tarfile.TarFile(file_path) as archive:
                 for file in archive:
-                    with bz2.open(archive.extractfile(file)) as f:
-                        name = file.name
-                        bytes = f.read()
-
-                        yield (name, bytes)
+                    f: bz2.BZ2File = bz2.open(archive.extractfile(file))
+                    yield bflw.File(file.name, f.read(), cumulative_runner_tv=True)
         return None
 
-    for name, bytes in load_tar(paths):
-        file = bflw.File(name, bytes, cumulative_runner_tv=True)
+    market_count = 0
+    update_count = 0
 
+    for file in load_tar(paths):
         market_count += 1
         for market_books in file:
             for market_book in market_books:
@@ -45,7 +40,7 @@ def run_with_rust_loading():
     market_count = 0
     update_count = 0
     
-    for file in betfair_data.TarBz2(paths, cumulative_runner_tv=True).bflw():
+    for file in bfd.Files(paths, cumulative_runner_tv=True).bflw():
         market_count += 1
 
         for market_books in file:

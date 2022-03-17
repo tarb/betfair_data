@@ -11,10 +11,9 @@ use super::definition::MarketDefinition;
 use super::runner::Runner;
 use crate::config::Config;
 use crate::datetime::DateTime;
-use crate::ids::MarketID;
+use crate::ids::{MarketID, Clk};
 use crate::immutable::definition::MarketDefinitionDeser;
 use crate::immutable::runner::RunnerChangeSeq;
-use crate::strings::FixedSizeString;
 
 #[derive(Clone)]
 #[pyclass(name = "Market")]
@@ -24,7 +23,7 @@ pub struct Market {
     #[pyo3(get)]
     pub publish_time: DateTime,
     #[pyo3(get)]
-    pub clk: SyncObj<FixedSizeString<10>>,
+    pub clk: SyncObj<Clk>,
     #[pyo3(get)]
     pub runners: SyncObj<Arc<Vec<Py<Runner>>>>,
     #[pyo3(get)]
@@ -198,7 +197,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketsDeser<'a, 'py> {
                 V: MapAccess<'de>,
             {
                 let mut pt: Option<DateTime> = None;
-                let mut clk: Option<FixedSizeString<10>> = None;
+                let mut clk: Option<Clk> = None;
                 let mut books: VecDeque<Py<Market>> = VecDeque::new();
 
                 while let Some(key) = map.next_key()? {
@@ -214,7 +213,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketsDeser<'a, 'py> {
                             })?;
                         }
                         Field::Clk => {
-                            clk = Some(map.next_value::<FixedSizeString<10>>()?);
+                            clk = Some(map.next_value::<Clk>()?);
                         }
                         Field::Op => {
                             map.next_value::<IgnoredAny>()?;
@@ -226,7 +225,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketsDeser<'a, 'py> {
                     books.iter_mut().for_each(|mb| {
                         let mut m = mb.borrow_mut(self.py);
                         m.publish_time = pt;
-                        m.clk = SyncObj::new(clk);
+                        m.clk = SyncObj::new(clk.clone());
                     });
                 }
 

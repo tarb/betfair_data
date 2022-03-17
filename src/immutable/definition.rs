@@ -306,7 +306,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::BspMarket => {
                             let bsp_market = map.next_value()?;
-                            if self.def.is_some_with(|def| def.bsp_market != bsp_market)
+                            if self.def.is_some_and(|def| def.bsp_market != bsp_market)
                                 || self.def.is_none()
                             {
                                 upt.bsp_market = Some(bsp_market);
@@ -315,7 +315,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Name => {
                             let market_name = map.next_value::<Cow<str>>()?;
-                            if self.def.is_some_with(|def| {
+                            if self.def.is_some_and(|def| {
                                 !def.market_name.contains(&market_name.as_ref())
                             }) || self.def.is_none()
                             {
@@ -325,7 +325,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::TurnInPlayEnabled => {
                             let turn_in_play_enabled = map.next_value()?;
-                            if self.def.is_some_with(|def| {
+                            if self.def.is_some_and(|def| {
                                 def.turn_in_play_enabled != turn_in_play_enabled
                             }) || self.def.is_none()
                             {
@@ -335,7 +335,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::InPlay => {
                             let in_play = map.next_value()?;
-                            if self.def.is_some_with(|def| def.in_play != in_play)
+                            if self.def.is_some_and(|def| def.in_play != in_play)
                                 || self.def.is_none()
                             {
                                 upt.in_play = Some(in_play);
@@ -346,7 +346,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let persistence_enabled = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.persistence_enabled != persistence_enabled)
+                                .is_some_and(|def| def.persistence_enabled != persistence_enabled)
                                 || self.def.is_none()
                             {
                                 upt.persistence_enabled = Some(persistence_enabled);
@@ -357,7 +357,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let bsp_reconciled = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.bsp_reconciled != bsp_reconciled)
+                                .is_some_and(|def| def.bsp_reconciled != bsp_reconciled)
                                 || self.def.is_none()
                             {
                                 upt.bsp_reconciled = Some(bsp_reconciled);
@@ -366,7 +366,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Complete => {
                             let complete = map.next_value()?;
-                            if self.def.is_some_with(|def| def.complete != complete)
+                            if self.def.is_some_and(|def| def.complete != complete)
                                 || self.def.is_none()
                             {
                                 upt.complete = Some(complete);
@@ -377,7 +377,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let cross_matching = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.cross_matching != cross_matching)
+                                .is_some_and(|def| def.cross_matching != cross_matching)
                                 || self.def.is_none()
                             {
                                 upt.cross_matching = Some(cross_matching);
@@ -388,7 +388,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let runners_voidable = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.runners_voidable != runners_voidable)
+                                .is_some_and(|def| def.runners_voidable != runners_voidable)
                                 || self.def.is_none()
                             {
                                 upt.runners_voidable = Some(runners_voidable);
@@ -399,7 +399,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let discount_allowed = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.discount_allowed != discount_allowed)
+                                .is_some_and(|def| def.discount_allowed != discount_allowed)
                                 || self.def.is_none()
                             {
                                 upt.discount_allowed = Some(discount_allowed);
@@ -410,7 +410,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let timezone = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.timezone.as_ref() != timezone)
+                                .is_some_and(|def| def.timezone.as_ref() != timezone)
                                 || self.def.is_none()
                             {
                                 upt.timezone = Some(timezone);
@@ -422,7 +422,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let event_name = map.next_value::<Cow<str>>()?;
                             if self
                                 .def
-                                .is_some_with(|def| !def.event_name.contains(&event_name.as_ref()))
+                                .is_some_and(|def| !def.event_name.contains(&event_name.as_ref()))
                                 || self.def.is_none()
                             {
                                 upt.event_name = Some(event_name);
@@ -433,7 +433,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let country_code = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| !def.country_code.contains(&country_code))
+                                .is_some_and(|def| !def.country_code.contains(&country_code))
                                 || self.def.is_none()
                             {
                                 upt.country_code = Some(country_code);
@@ -442,7 +442,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Venue => {
                             let venue = map.next_value::<&str>()?;
-                            if self.def.is_some_with(|def| !def.venue.contains(&venue))
+                            if self.def.is_some_and(|def| !def.venue.contains(&venue))
                                 || self.def.is_none()
                             {
                                 upt.venue = Some(venue);
@@ -451,7 +451,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Status => {
                             let status = map.next_value()?;
-                            if self.def.is_some_with(|def| def.status != status)
+                            if self.def.is_some_and(|def| def.status != status)
                                 || self.def.is_none()
                             {
                                 upt.status = Some(status);
@@ -462,7 +462,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let market_base_rate = map.next_value::<f32>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.market_base_rate != market_base_rate)
+                                .is_some_and(|def| def.market_base_rate != market_base_rate)
                                 || self.def.is_none()
                             {
                                 upt.market_base_rate = Some(market_base_rate);
@@ -473,7 +473,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let number_of_winners = map.next_value::<f32>()? as u8;
                             if self
                                 .def
-                                .is_some_with(|def| def.number_of_winners != number_of_winners)
+                                .is_some_and(|def| def.number_of_winners != number_of_winners)
                                 || self.def.is_none()
                             {
                                 upt.number_of_winners = Some(number_of_winners);
@@ -482,7 +482,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::NumberOfActiveRunners => {
                             let number_of_active_runners = map.next_value()?;
-                            if self.def.is_some_with(|def| {
+                            if self.def.is_some_and(|def| {
                                 def.number_of_active_runners != number_of_active_runners
                             }) || self.def.is_none()
                             {
@@ -492,7 +492,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::BetDelay => {
                             let bet_delay = map.next_value()?;
-                            if self.def.is_some_with(|def| def.bet_delay != bet_delay)
+                            if self.def.is_some_and(|def| def.bet_delay != bet_delay)
                                 || self.def.is_none()
                             {
                                 upt.bet_delay = Some(bet_delay);
@@ -504,7 +504,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 .next_value::<&str>()?
                                 .parse()
                                 .map_err(de::Error::custom)?;
-                            if self.def.is_some_with(|def| def.event_id != event_id)
+                            if self.def.is_some_and(|def| def.event_id != event_id)
                                 || self.def.is_none()
                             {
                                 upt.event_id = Some(event_id);
@@ -518,7 +518,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 .map_err(de::Error::custom)?;
                             if self
                                 .def
-                                .is_some_with(|def| def.event_type_id != event_type_id)
+                                .is_some_and(|def| def.event_type_id != event_type_id)
                                 || self.def.is_none()
                             {
                                 upt.event_type_id = Some(event_type_id);
@@ -527,7 +527,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Version => {
                             let version = map.next_value()?;
-                            if self.def.is_some_with(|def| def.version != version)
+                            if self.def.is_some_and(|def| def.version != version)
                                 || self.def.is_none()
                             {
                                 upt.version = Some(version);
@@ -538,7 +538,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let market_type = map.next_value::<&str>()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.market_type.as_ref() != market_type)
+                                .is_some_and(|def| def.market_type.as_ref() != market_type)
                                 || self.def.is_none()
                             {
                                 upt.market_type = Some(market_type);
@@ -549,7 +549,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let betting_type = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.betting_type != betting_type)
+                                .is_some_and(|def| def.betting_type != betting_type)
                             {
                                 upt.betting_type = Some(betting_type);
                                 changed = true;
@@ -560,7 +560,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let market_time = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.market_time.as_str() != market_time)
+                                .is_some_and(|def| def.market_time.as_str() != market_time)
                                 || self.def.is_none()
                             {
                                 upt.market_time = Some(market_time);
@@ -571,7 +571,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let suspend_time = map.next_value::<&str>()?;
                             if !self
                                 .def
-                                .is_some_with(|def| def.suspend_time.contains(&suspend_time))
+                                .is_some_and(|def| def.suspend_time.contains(&suspend_time))
                                 || self.def.is_none()
                             {
                                 upt.suspend_time = Some(suspend_time);
@@ -582,7 +582,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let settled_time = map.next_value::<&str>()?;
                             if !self
                                 .def
-                                .is_some_with(|def| def.settled_time.contains(&settled_time))
+                                .is_some_and(|def| def.settled_time.contains(&settled_time))
                                 || self.def.is_none()
                             {
                                 upt.settled_time = Some(settled_time);
@@ -593,7 +593,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             let open_date = map.next_value()?;
                             if self
                                 .def
-                                .is_some_with(|def| def.open_date.as_str() != open_date)
+                                .is_some_and(|def| def.open_date.as_str() != open_date)
                                 || self.def.is_none()
                             {
                                 upt.open_date = Some(open_date);
@@ -604,7 +604,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         Field::Regulators => {
                             let v = map.next_value::<Vec<&str>>()?;
 
-                            if self.def.is_some_with(|def| {
+                            if self.def.is_some_and(|def| {
                                 (def.regulators.is_empty() && !v.is_empty())
                                     || !def.regulators.iter().eq(v.iter())
                             }) || self.def.is_none()
@@ -936,11 +936,11 @@ impl<'a> RunnerDefUpdate<'a> {
             || ((runner.name.is_none() && self.name.is_some())
                 || runner
                     .name
-                    .is_some_with(|s| !self.name.contains(&s.as_ref())))
+                    .is_some_and(|s| !self.name.contains(&s.as_ref())))
             || ((runner.removal_date.is_none() && self.removal_date.is_some())
                 || runner
                     .removal_date
-                    .is_some_with(|s| !self.removal_date.contains(&s.as_str())))
+                    .is_some_and(|s| !self.removal_date.contains(&s.as_str())))
     }
 
     fn update(&self, runner: &Runner, py: Python) -> Runner {

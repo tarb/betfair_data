@@ -78,11 +78,11 @@ impl MarketDefinitionRunner {
             || ((self.name.is_none() && change.name.is_some())
                 || self
                     .name
-                    .is_some_with(|s| !change.name.contains(&s.as_ref())))
+                    .is_some_and(|s| !change.name.contains(&s.as_ref())))
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
                     .removal_date
-                    .is_some_with(|s| !change.removal_date.contains(&s.as_str())))
+                    .is_some_and(|s| !change.removal_date.contains(&s.as_str())))
     }
 
     fn update_from_change(&self, change: &MarketDefRunnerUpdate) -> Self {

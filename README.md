@@ -1,10 +1,8 @@
 # Betfair Data
 
-Betfair Data is a very fast Betfair historical data file parsing library for python. It currently supports tar archives containing BZ2 compressed NLJSON files (the standard format provided by [Betfair's historic data portal](https://historicdata.betfair.com/#/home)).
+Betfair Data is a very fast Betfair historical data file parsing library for python. It supports both the official [Betfair's historic data](https://historicdata.betfair.com/#/home) and self recorded stream files. 
 
 The library is written in Rust and uses advanced performance enhancing techniques, like in place json deserialization and decompressing Bz2/Gzip encoded data on worker threads and is ideal for parsing large quantities of historic data that could otherwise take hours or days to parse.
-
-This library is a work in progress and is still subject to breaking changes.
 
 ## Installation
 
@@ -12,13 +10,13 @@ This library is a work in progress and is still subject to breaking changes.
 pip install betfair_data
 ```
 
-Note: requires Python >= 3.6.
+Note: requires Python >= 3.7.
 
 
 ## Example
 
 ```python
-import betfair_data
+import betfair_data as bfd
 
 paths = [
     "data/2021_12_DecRacingAUPro.tar",
@@ -29,11 +27,10 @@ paths = [
 market_count = 0
 update_count = 0
 
-for market in betfair_data.TarBz2(paths).mutable():
+for market in bfd.Files(paths).iter():
     market_count += 1
-    update_count += 1
-    
-    while market.update():
+
+    for market in file:
         update_count += 1
 
     print(f"Markets {market_count} Updates {update_count}", end='\r')
@@ -91,7 +88,7 @@ for market in mut_iter: # different markets per file
         pass
 ```
 
-Immutable objects, slightly slower but can be easier to use. Equilivent of calling market.copy() on every update but faster, as only objects that change make new copies. ```NOT YET FINISHED```
+Immutable objects, slightly slower but can be easier to use. Equilivent of calling market.copy() on every update but faster, as only objects that change make new copies. 
 ``` python
 immut_iter = files.immutable()
 for market_iter in immut_iter: # different files
