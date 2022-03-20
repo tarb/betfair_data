@@ -1,6 +1,6 @@
 use core::fmt;
 use pyo3::prelude::*;
-use serde::de::{DeserializeSeed, MapAccess, Visitor};
+use serde::de::{DeserializeSeed, Error, MapAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::sync::Arc;
@@ -10,6 +10,7 @@ use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
 use crate::config::Config;
 use crate::datetime::DateTimeString;
 use crate::enums::{MarketBettingType, MarketStatus, SelectionStatus};
+use crate::errors::DataError;
 use crate::ids::{EventID, EventTypeID, SelectionID};
 use crate::immutable::container::SyncObj;
 use crate::immutable::runner::Runner;
@@ -83,8 +84,8 @@ struct MarketDefinitionUpdate<'a> {
 }
 
 impl<'a, 'b> MarketDefinitionUpdate<'a> {
-    fn create(self) -> MarketDefinition {
-        MarketDefinition {
+    fn create(self) -> Result<MarketDefinition, DataError> {
+        Ok(MarketDefinition {
             each_way_divisor: Default::default(),
             bet_delay: self.bet_delay.unwrap_or_default(),
             betting_type: self.betting_type.unwrap_or_default(),
@@ -111,21 +112,29 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             market_time: self
                 .market_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
-                .unwrap(),
+                .ok_or(DataError {
+                    missing_field: "marketTime",
+                })?,
             market_type: self
                 .market_type
                 .map(|s| SyncObj::new(Arc::from(s)))
-                .unwrap(),
+                .ok_or(DataError {
+                    missing_field: "marketType",
+                })?,
             timezone: self.timezone.map(|s| SyncObj::new(Arc::from(s))).unwrap(),
             venue: self.venue.map(|s| SyncObj::new(Arc::from(s))),
             country_code: self
                 .country_code
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap()))
-                .unwrap(), // todo
+                .ok_or(DataError {
+                    missing_field: "countryCode",
+                })?,
             open_date: self
                 .open_date
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
-                .unwrap(),
+                .ok_or(DataError {
+                    missing_field: "openDate",
+                })?,
             settled_time: self
                 .settled_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
@@ -138,7 +147,7 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             event_name: self
                 .event_name
                 .map(|s| SyncObj::new(Arc::from(s.into_owned()))),
-        }
+        })
     }
 
     fn update(self, market: &MarketDefinition) -> MarketDefinition {
@@ -315,9 +324,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::Name => {
                             let market_name = map.next_value::<Cow<str>>()?;
-                            if self.def.is_some_and(|def| {
-                                !def.market_name.contains(&market_name.as_ref())
-                            }) || self.def.is_none()
+                            if self
+                                .def
+                                .is_some_and(|def| !def.market_name.contains(&market_name.as_ref()))
+                                || self.def.is_none()
                             {
                                 upt.market_name = Some(market_name);
                                 changed = true;
@@ -325,9 +335,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::TurnInPlayEnabled => {
                             let turn_in_play_enabled = map.next_value()?;
-                            if self.def.is_some_and(|def| {
-                                def.turn_in_play_enabled != turn_in_play_enabled
-                            }) || self.def.is_none()
+                            if self
+                                .def
+                                .is_some_and(|def| def.turn_in_play_enabled != turn_in_play_enabled)
+                                || self.def.is_none()
                             {
                                 upt.turn_in_play_enabled = Some(turn_in_play_enabled);
                                 changed = true;
@@ -547,9 +558,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::BettingType => {
                             let betting_type = map.next_value()?;
-                            if self
-                                .def
-                                .is_some_and(|def| def.betting_type != betting_type)
+                            if self.def.is_some_and(|def| def.betting_type != betting_type)
+                                || self.def.is_none()
                             {
                                 upt.betting_type = Some(betting_type);
                                 changed = true;
@@ -640,7 +650,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 
                 let next_def = match self.def {
                     Some(def) if changed => Some(Arc::new(upt.update(def))),
-                    None if changed => Some(Arc::new(upt.create())),
+                    None if changed => {
+                        let data = upt.create().map_err(|err| {
+                            Error::custom(format!("missing required field <{}>", err.missing_field))
+                        })?;
+
+                        Some(Arc::new(data))
+                    }
                     _ => None,
                 };
 
@@ -748,18 +764,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                 Swap(usize, usize),
                                 Nothing,
                             }
+
+                            let sid = SelectionID::from((change.id, change.hc));
+
                             let action = {
                                 let runner_index = n
                                     .get(i)
                                     .and_then(|r| {
                                         let r = r.borrow_mut(self.py);
-                                        (r.selection_id == change.id).then_some((r, i))
+                                        (r.selection_id == sid).then_some((r, i))
                                     })
                                     .or_else(|| {
                                         n.iter()
-                                            .position(|r| {
-                                                r.borrow_mut(self.py).selection_id == change.id
-                                            })
+                                            .position(|r| r.borrow_mut(self.py).selection_id == sid)
                                             .and_then(|pos| {
                                                 n.get(pos).map(|r| (r.borrow_mut(self.py), pos))
                                             })
@@ -801,9 +818,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                         let mut i = 0;
 
                         while let Some(change) = seq.next_element::<RunnerDefUpdate>()? {
+                            let sid = SelectionID::from((change.id, change.hc));
+
                             let r = self.runners.and_then(|rs| {
                                 rs.iter()
-                                    .position(|r| r.borrow(self.py).selection_id == change.id)
+                                    .position(|r| r.borrow(self.py).selection_id == sid)
                                     .map(|i| (unsafe { rs.get_unchecked(i) }, i))
                             });
 
@@ -893,14 +912,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RunnerDefUpdate<'a> {
-    id: SelectionID,
+    id: u32,
     adjustment_factor: Option<f64>,
     status: SelectionStatus,
     sort_priority: u16,
     name: Option<&'a str>,
     bsp: Option<F64OrStr>,
     removal_date: Option<&'a str>,
-    hc: Option<F64OrStr>,
+    hc: Option<f32>,
 }
 
 impl<'a> RunnerDefUpdate<'a> {
@@ -910,11 +929,12 @@ impl<'a> RunnerDefUpdate<'a> {
             ..Default::default()
         };
 
+        let sid = SelectionID::from((self.id, self.hc));
+
         Runner {
-            selection_id: self.id,
+            selection_id: sid,
             status: self.status,
             adjustment_factor: self.adjustment_factor,
-            handicap: self.hc.map(|f| *f),
             sort_priority: self.sort_priority,
             name: self.name.map(|s| SyncObj::new(Arc::from(s))),
             removal_date: self
@@ -932,7 +952,6 @@ impl<'a> RunnerDefUpdate<'a> {
             || runner.adjustment_factor != self.adjustment_factor
             || runner.sort_priority != self.sort_priority
             || runner.sp.borrow(py).actual_sp != self.bsp.map(|f| *f)
-            || runner.handicap != self.hc.map(|f| *f)
             || ((runner.name.is_none() && self.name.is_some())
                 || runner
                     .name
@@ -971,7 +990,6 @@ impl<'a> RunnerDefUpdate<'a> {
             selection_id: runner.selection_id,
             status: self.status,
             adjustment_factor: self.adjustment_factor.or(runner.adjustment_factor),
-            handicap: self.hc.map(|f| *f).or(runner.handicap),
             sort_priority: if runner.sort_priority != self.sort_priority {
                 self.sort_priority
             } else {
@@ -1028,9 +1046,6 @@ impl<'a> RunnerDefUpdate<'a> {
         }
         if runner.status != self.status {
             runner.status = self.status;
-        }
-        if runner.handicap != self.hc.map(|f| *f) {
-            runner.handicap = self.hc.map(|f| *f);
         }
         if runner.adjustment_factor != self.adjustment_factor {
             runner.adjustment_factor = self.adjustment_factor;

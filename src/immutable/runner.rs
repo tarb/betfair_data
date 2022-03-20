@@ -19,10 +19,9 @@ use crate::py_rep::PyRep;
 
 #[pyclass(name = "Runner")]
 pub struct Runner {
+    pub selection_id: SelectionID,
     #[pyo3(get)]
     pub status: SelectionStatus,
-    #[pyo3(get)]
-    pub selection_id: SelectionID,
     #[pyo3(get)]
     pub name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
@@ -32,8 +31,6 @@ pub struct Runner {
     #[pyo3(get)]
     pub adjustment_factor: Option<f64>,
     #[pyo3(get)]
-    pub handicap: Option<f64>,
-    #[pyo3(get)]
     pub ex: Py<RunnerBookEX>,
     #[pyo3(get)]
     pub sp: Py<RunnerBookSP>,
@@ -42,6 +39,19 @@ pub struct Runner {
     #[pyo3(get)]
     pub removal_date: Option<SyncObj<DateTimeString>>,
 }
+
+#[pymethods]
+impl Runner {
+    #[getter(selection_id)]
+    fn get_selection_id(&self) -> u32 {
+        self.selection_id.id()
+    }
+    #[getter(handicap)]
+    fn get_handicap(&self) -> Option<f32> {
+        self.selection_id.handicap()
+    }
+}
+
 
 impl PyRep for Vec<Py<Runner>> {
     fn py_rep(&self, py: Python) -> PyObject {
@@ -82,7 +92,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
             {
                 #[derive(Deserialize)]
                 struct RunnerWithID {
-                    id: SelectionID,
+                    id: u32,
+                    hc: Option<f32>,
                 }
 
                 let mut next_runners = match self.next {
@@ -95,17 +106,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
-                    let rid: RunnerWithID =
+                    let parts: RunnerWithID =
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
+                    let sid = SelectionID::from((parts.id, parts.hc));
 
                     let index = next_runners
                         .iter()
                         .map(|r| r.borrow(self.py))
-                        .position(|r| r.selection_id == rid.id);
+                        .position(|r| r.selection_id == sid);
 
                     match index {
                         Some(index) => {
                             let runner = RunnerChangeDeser {
+                                id: sid,
                                 runner: Some(unsafe {
                                     next_runners.get_unchecked(index).borrow(self.py)
                                 }),
@@ -119,6 +132,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
                         }
                         None => {
                             let runner = RunnerChangeDeser {
+                                id: sid,
                                 runner: None,
                                 py: self.py,
                                 config: self.config,
@@ -145,6 +159,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 }
 
 struct RunnerChangeDeser<'py> {
+    id: SelectionID,
     runner: Option<PyRef<'py, Runner>>,
     py: Python<'py>,
     config: Config,
@@ -173,6 +188,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
         }
 
         struct RunnerChangeVisitor<'py> {
+            id: SelectionID,
             runner: Option<PyRef<'py, Runner>>,
             py: Python<'py>,
             config: Config,
@@ -188,12 +204,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
             where
                 V: MapAccess<'de>,
             {
-                let mut upt = RunnerChangeUpdate::default();
+                let mut upt = RunnerChangeUpdate::new(self.id);
 
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Id => {
-                            upt.id = map.next_value::<SelectionID>()?;
+                            map.next_value::<IgnoredAny>()?;
                         }
                         Field::Atb => {
                             let ex = self.runner.as_ref().map(|r| r.ex.borrow(self.py));
@@ -241,7 +257,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
                             upt.ltp = Some(map.next_value::<F64OrStr>()?.into());
                         }
                         Field::Hc => {
-                            upt.hc = Some(map.next_value::<F64OrStr>()?.into());
+                            map.next_value::<IgnoredAny>()?;
                         }
                         // The betfair historic data files differ from the stream here, they send tv deltas
                         // that need to be accumulated, whereas the stream sends the value itself.
@@ -272,6 +288,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
             "RunnerChange",
             FIELDS,
             RunnerChangeVisitor {
+                id: self.id,
                 runner: self.runner,
                 py: self.py,
                 config: self.config,
@@ -280,7 +297,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'py> {
     }
 }
 
-#[derive(Debug, Default)]
 struct RunnerChangeUpdate {
     id: SelectionID,
     atb: Option<Vec<PriceSize>>,
@@ -292,10 +308,24 @@ struct RunnerChangeUpdate {
     spf: Option<f64>,
     tv: Option<f64>,
     ltp: Option<f64>,
-    hc: Option<f64>,
 }
 
 impl RunnerChangeUpdate {
+    fn new(id: SelectionID) -> Self {
+        Self {
+            id, 
+            atb: Default::default(),
+            atl: Default::default(),
+            trd: Default::default(),
+            spb: Default::default(),
+            spl: Default::default(),
+            spn: Default::default(),
+            spf: Default::default(),
+            tv:  Default::default(),
+            ltp: Default::default(),
+        }
+    }
+
     fn create(self, py: Python) -> Runner {
         let ex = Py::new(
             py,
@@ -326,7 +356,6 @@ impl RunnerChangeUpdate {
             last_price_traded: self.ltp,
             total_matched: self.tv.unwrap_or_default(),
             adjustment_factor: None,
-            handicap: self.hc,
             ex,
             sp,
             sort_priority: 0,
@@ -391,7 +420,6 @@ impl RunnerChangeUpdate {
             last_price_traded: self.ltp.or(runner.last_price_traded),
             total_matched: self.tv.unwrap_or(runner.total_matched),
             adjustment_factor: runner.adjustment_factor,
-            handicap: self.hc.or(runner.handicap),
             ex,
             sp,
             sort_priority: runner.sort_priority,

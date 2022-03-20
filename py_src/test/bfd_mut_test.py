@@ -3,17 +3,20 @@ from types import NoneType
 from typing import List
 import betfair_data as bfd
 import logging
+import glob
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s %(message)s')
 
-paths = [
-    "data/2021_10_OctRacingAUPro.tar",
-    "data/2021_11_NovRacingAUPro.tar",
-    "data/2021_12_DecRacingAUPro.tar",
-]
+# paths = [
+#     "data/2021_10_OctRacingAUPro.tar",
+#     "data/2021_11_NovRacingAUPro.tar",
+#     "data/2021_12_DecRacingAUPro.tar",
+# ]
 
-mut = bfd.TarBz2(paths, cumulative_runner_tv=True).iter(mutable=True)
-imm = bfd.TarBz2(paths, cumulative_runner_tv=True).iter(mutable=False)
+paths = glob.glob("data/*OtherSports*")
+
+mut = bfd.Files(paths, cumulative_runner_tv=True).iter(mutable=True)
+imm = bfd.Files(paths, cumulative_runner_tv=True).iter(mutable=False)
 
 def start_test():
     market_count = 0
@@ -100,4 +103,7 @@ def test_float(f1: float|NoneType, f2: float|NoneType) -> bool:
 def print_ladder(ladder: List[bfd.PriceSize]) -> str:
     return ' '.join(list(f"[{ps.price}, {ps.size}]" for ps in ladder))
 
-start_test()
+try:
+    start_test()
+except: 
+    print("derp")

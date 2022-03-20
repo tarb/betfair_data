@@ -10,10 +10,10 @@ use super::runner_book::RunnerBook;
 use crate::bflw::market_definition::MarketDefinitionDeser;
 use crate::bflw::runner_book::RunnerChangeSeq;
 use crate::bflw::RoundToCents;
+use crate::datetime::{DateTime, DateTimeString};
 use crate::enums::MarketStatus;
 use crate::ids::MarketID;
 use crate::immutable::container::SyncObj;
-use crate::datetime::{DateTime, DateTimeString};
 use crate::market_source::SourceConfig;
 
 #[pyclass]
@@ -246,7 +246,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
                 V: MapAccess<'de>,
             {
                 let mut pt: Option<DateTime> = None;
-                let mut books: Vec<Py<MarketBook>> = Vec::new();
+                let mut next_books: Vec<Py<MarketBook>> = Vec::new();
 
                 while let Some(key) = map.next_key()? {
                     match key {
@@ -260,7 +260,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
                             map.next_value::<IgnoredAny>()?;
                         }
                         Field::Mc => {
-                            books = map.next_value_seed(MarketMcSeq {
+                            next_books = map.next_value_seed(MarketMcSeq {
                                 markets: self.markets,
                                 py: self.py,
                                 config: self.config,
@@ -270,12 +270,32 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
                 }
 
                 if let Some(pt) = pt {
-                    books
+                    next_books
                         .iter_mut()
                         .for_each(|mb| mb.borrow_mut(self.py).publish_time = pt);
                 }
 
-                Ok(books)
+                // merge next_books and markets with missing clone_ref's
+                for (i, mb) in self.markets.iter().enumerate() {
+                    let rmb = mb.borrow(self.py);
+                    let pos = next_books
+                        .iter()
+                        .position(|nmb| *nmb.borrow(self.py).market_id == *rmb.market_id);
+
+                    match pos {
+                        Some(ni) if i != ni => next_books.swap(i, ni),
+                        None => {
+                            next_books.push(mb.clone_ref(self.py));
+
+                            let ni = next_books.len() - 1;
+                            next_books.swap(i, ni);
+                        }
+                        // Some with ni and i in same location - do nothing
+                        _ => {}
+                    }
+                }
+
+                Ok(next_books)
             }
         }
 
@@ -327,26 +347,31 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                     img: Option<bool>,
                 }
 
-                let mut next_books: Vec<Py<MarketBook>> = Vec::new();
+                let mut next_books: Vec<Py<MarketBook>> = Vec::with_capacity(self.markets.len());
 
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
                     let mid: MarketWithID =
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
-                    let mb = {
-                        if mid.img.contains(&true) {
-                            None
-                        } else {
-                            next_books
-                                .iter()
-                                .find(|m| (*m).borrow(self.py).market_id.as_str() == mid.id)
-                                .or_else(|| {
-                                    self.markets.iter().find(|m| {
-                                        (*m).borrow(self.py).market_id.as_str() == mid.id
-                                    })
-                                })
-                                .map(|o| o.borrow(self.py))
+                    let (mb, i) = {
+                        let i = next_books
+                            .iter()
+                            .position(|m| (*m).borrow(self.py).market_id.as_str() == mid.id);
+
+                        match i {
+                            Some(i) if !mid.img.contains(&true) => {
+                                (next_books.get(i).map(|m| m.borrow(self.py)), Some(i))
+                            }
+                            Some(i) if mid.img.contains(&true) => (None, Some(i)),
+                            None if !mid.img.contains(&true) => (
+                                self.markets
+                                    .iter()
+                                    .find(|m| (*m).borrow(self.py).market_id.as_str() == mid.id)
+                                    .map(|o| o.borrow(self.py)),
+                                None,
+                            ),
+                            _ => (None, None),
                         }
                     };
 
@@ -358,7 +383,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                     .deserialize(&mut deser)
                     .map_err(Error::custom)?;
 
-                    next_books.push(Py::new(self.py, next_mb).unwrap());
+                    match i {
+                        Some(i) => next_books[i] = Py::new(self.py, next_mb).unwrap(),
+                        None => next_books.push(Py::new(self.py, next_mb).unwrap()),
+                    }
                 }
 
                 Ok(next_books)
@@ -428,9 +456,10 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                                 .market
                                 .as_ref()
                                 .map(|mb| mb.market_definition.borrow(self.py));
-                            let runners = upt.runners.as_ref().or_else(|| {
-                                self.market.as_ref().map(|mb| mb.runners.as_ref())
-                            });
+                            let runners = upt
+                                .runners
+                                .as_ref()
+                                .or_else(|| self.market.as_ref().map(|mb| mb.runners.as_ref()));
 
                             let (d, r) = map.next_value_seed(MarketDefinitionDeser {
                                 def,
@@ -443,9 +472,10 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
                             upt.runners = r;
                         }
                         Field::Rc => {
-                            let runners = upt.runners.as_ref().or_else(|| {
-                                self.market.as_ref().map(|mb| mb.runners.as_ref())
-                            });
+                            let runners = upt
+                                .runners
+                                .as_ref()
+                                .or_else(|| self.market.as_ref().map(|mb| mb.runners.as_ref()));
                             upt.runners = Some(map.next_value_seed(RunnerChangeSeq {
                                 runners,
                                 py: self.py,

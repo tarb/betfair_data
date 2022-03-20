@@ -21,7 +21,6 @@ use crate::py_rep::PyRep;
 
 #[pyclass]
 pub struct RunnerBook {
-    #[pyo3(get)]
     pub selection_id: SelectionID,
     #[pyo3(get)]
     pub status: SelectionStatus,
@@ -29,8 +28,6 @@ pub struct RunnerBook {
     pub total_matched: f64,
     #[pyo3(get)]
     pub adjustment_factor: Option<f64>,
-    #[pyo3(get)]
-    pub handicap: FloatStr, // I like this better as Option<f64> but bflw compat
     #[pyo3(get)]
     pub last_price_traded: Option<FloatStr>,
     #[pyo3(get)]
@@ -45,8 +42,20 @@ pub struct RunnerBook {
     pub orders: Vec<()>,
 }
 
+#[pymethods]
+impl RunnerBook {
+    #[getter(selection_id)]
+    fn get_selection_id(&self) -> u32 {
+        self.selection_id.id()
+    }
+    #[getter(handicap)]
+    fn get_handicap(&self) -> FloatStr {
+        let f = self.selection_id.handicap().unwrap_or(0.0);
+        FloatStr(f as f64)
+    }
+}
+
 pub struct RunnerChangeUpdate {
-    handicap: Option<FloatStr>,
     last_price_traded: Option<FloatStr>,
     total_matched: Option<f64>,
     ex: Option<Py<RunnerBookEX>>,
@@ -66,7 +75,6 @@ impl RunnerBook {
             status: Default::default(),
             total_matched: Default::default(),
             adjustment_factor: Default::default(),
-            handicap: Default::default(),
             last_price_traded: Default::default(),
             removal_date: Default::default(),
             ex: Py::new(py, RunnerBookEX::default()).unwrap(),
@@ -82,7 +90,6 @@ impl RunnerBook {
             adjustment_factor: self.adjustment_factor,
             status: self.status,
             removal_date: self.removal_date.clone(),
-            handicap: change.handicap.unwrap_or(self.handicap),
             last_price_traded: change.last_price_traded.or(self.last_price_traded),
             total_matched: change.total_matched.unwrap_or(self.total_matched),
             ex: change.ex.unwrap_or_else(|| self.ex.clone_ref(py)),
@@ -96,7 +103,6 @@ impl RunnerBook {
     pub fn would_change(&self, change: &MarketDefRunnerUpdate, py: Python) -> bool {
         self.status != change.status
             || self.adjustment_factor != change.adjustment_factor
-            || !change.hc.is_some_and(|h| *h == self.handicap)
             || (change.bsp.is_some() && self.sp.borrow(py).actual_sp != change.bsp)
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
@@ -132,7 +138,6 @@ impl RunnerBook {
             selection_id: self.selection_id,
             status: change.status,
             adjustment_factor: change.adjustment_factor.or(self.adjustment_factor),
-            handicap: change.hc.unwrap_or(self.handicap),
             last_price_traded: self.last_price_traded,
             total_matched: self.total_matched,
             ex,
@@ -193,18 +198,20 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
 
                 #[derive(Deserialize)]
                 struct RunnerWithID {
-                    id: SelectionID,
+                    id: u32,
+                    hc: Option<f32>,
                 }
 
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
-                    let rid: RunnerWithID =
+                    let parts: RunnerWithID =
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
+                    let sid = SelectionID::from((parts.id, parts.hc));
 
                     let index = v
                         .iter()
                         .map(|r| r.borrow(self.py))
-                        .position(|r| r.selection_id == rid.id);
+                        .position(|r| r.selection_id == sid);
 
                     match index {
                         Some(index) => {
@@ -222,7 +229,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeq<'a, 'py> {
                             v[index] = Py::new(self.py, runner).unwrap();
                         }
                         None => {
-                            let runner = RunnerBook::new(rid.id, self.py);
+                            let runner = RunnerBook::new(sid, self.py);
                             let runner = RunnerBookChangeDeser {
                                 runner: &runner,
                                 py: self.py,
@@ -303,14 +310,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
 
                 let mut tv: Option<f64> = None;
                 let mut ltp: Option<FloatStr> = None;
-                let mut hc: Option<FloatStr> = None;
 
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Id => {
-                            let id = map.next_value::<SelectionID>()?;
-                            debug_assert!(id == self.runner.selection_id);
-                        }
                         Field::Atb => {
                             let ex = self.runner.ex.borrow(self.py);
                             atb = Some(map.next_value_seed(ImmutablePriceSizeLayLadder(Some(
@@ -357,7 +359,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                             ltp = Some(map.next_value::<FloatStr>()?);
                         }
                         Field::Hc => {
-                            hc = Some(map.next_value::<FloatStr>()?);
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                        Field::Id => {
+                            map.next_value::<IgnoredAny>()?;
                         }
                         // The betfair historic data files differ from the stream here, they send tv deltas
                         // that need to be accumulated, whereas the stream sends the value itself.
@@ -400,7 +405,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                 };
 
                 let update = RunnerChangeUpdate {
-                    handicap: hc,
                     last_price_traded: ltp,
                     total_matched: tv,
                     ex,

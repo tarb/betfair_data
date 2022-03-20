@@ -27,7 +27,7 @@ paths = [
 market_count = 0
 update_count = 0
 
-for market in bfd.Files(paths).iter():
+for file in bfd.Files(paths).iter():
     market_count += 1
 
     for market in file:
@@ -55,7 +55,7 @@ import betfair_data
 import glob
 
 paths = glob.glob("data/*.tar")
-files = betfair_data.TarBz2(paths, cumulative_runner_tv=True)
+files = betfair_data.Files(paths, cumulative_runner_tv=True)
 ```
 
 Or load the file through any other means and pass the bytes and name into the object constructors.

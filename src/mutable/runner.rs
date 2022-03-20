@@ -18,10 +18,9 @@ use super::runner_book_sp::RunnerBookSPMut;
 
 #[pyclass(name = "RunnerMut")]
 pub struct Runner {
+    pub selection_id: SelectionID,
     #[pyo3(get)]
     pub status: SelectionStatus,
-    #[pyo3(get)]
-    pub selection_id: SelectionID,
     #[pyo3(get)]
     pub name: String,
     #[pyo3(get)]
@@ -30,8 +29,6 @@ pub struct Runner {
     pub total_matched: f64,
     #[pyo3(get)]
     pub adjustment_factor: Option<f64>,
-    #[pyo3(get)]
-    pub handicap: Option<f64>,
     #[pyo3(get)]
     pub ex: Py<RunnerBookEXMut>,
     #[pyo3(get)]
@@ -54,7 +51,6 @@ impl Runner {
             last_price_traded: Default::default(),
             total_matched: Default::default(),
             adjustment_factor: Default::default(),
-            handicap: Default::default(),
             sort_priority: Default::default(),
             removal_date: Default::default(),
             ex: Py::new(py, ex).unwrap(),
@@ -73,7 +69,6 @@ impl Runner {
             last_price_traded: self.last_price_traded,
             total_matched: self.total_matched,
             adjustment_factor: self.adjustment_factor,
-            handicap: self.handicap,
             sort_priority: self.sort_priority,
             removal_date: self.removal_date.clone(),
             ex: Py::new(py, ex).unwrap(),
@@ -87,6 +82,18 @@ impl Runner {
         self.total_matched = 0.0;
         self.last_price_traded = None;
         self.adjustment_factor = None;
+    }
+}
+
+#[pymethods]
+impl Runner {
+    #[getter(selection_id)]
+    fn get_selection_id(&self) -> u32 {
+        self.selection_id.id()
+    }
+    #[getter(handicap)]
+    fn get_handicap(&self) -> Option<f32> {
+        self.selection_id.handicap()
     }
 }
 
@@ -127,21 +134,24 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeqDeser<'a, 'py> {
                 // again as normal
                 #[derive(Deserialize)]
                 struct RunnerWithID {
-                    id: SelectionID,
+                    id: u32,
+                    hc: Option<f32>,
                 }
 
                 let mut i = 0;
 
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
-                    let rid: RunnerWithID =
+                    let parts: RunnerWithID =
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
+                    let rid = SelectionID::from((parts.id, parts.hc));
 
                     let index = self
                         .runners
                         .iter()
                         .map(|r| r.borrow_mut(self.py))
-                        .position(|r| r.selection_id == rid.id);
+                        .position(|r| r.selection_id == rid);
+
                     match index {
                         Some(mut index) => {
                             if index != i {
@@ -162,6 +172,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeqDeser<'a, 'py> {
                         }
                         None => {
                             let mut runner = Runner::new(self.py);
+                            runner.selection_id = rid;
                             RunnerDefinitonDeser {
                                 runner: &mut runner,
                                 config: self.config,
@@ -196,9 +207,9 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeqDeser<'a, 'py> {
 }
 
 struct RunnerDefinitonDeser<'a, 'py> {
-    pub runner: &'a mut Runner,
-    pub config: Config,
-    pub py: Python<'py>,
+    runner: &'a mut Runner,
+    config: Config,
+    py: Python<'py>,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefinitonDeser<'a, 'py> {
     type Value = ();
@@ -238,7 +249,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefinitonDeser<'a, 'py> {
             {
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Id => self.runner.selection_id = map.next_value()?,
                         Field::AdjustmentFactor => {
                             self.runner.adjustment_factor =
                                 Some(map.next_value::<F64OrStr>()?.into())
@@ -246,15 +256,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefinitonDeser<'a, 'py> {
                         Field::Status => {
                             self.runner.status = map.next_value()?;
 
-                            if self.runner.status == SelectionStatus::Removed || self.runner.status == SelectionStatus::RemovedVacant {
+                            if self.runner.status == SelectionStatus::Removed
+                                || self.runner.status == SelectionStatus::RemovedVacant
+                            {
                                 self.runner.ex.borrow_mut(self.py).clear();
                                 // self.runner.sp.borrow_mut(self.py).clear();
                             }
-                        },
-                        Field::SortPriority => self.runner.sort_priority = map.next_value()?,
-                        Field::Hc => {
-                            self.runner.handicap = Some(map.next_value::<F64OrStr>()?.into())
                         }
+                        Field::SortPriority => self.runner.sort_priority = map.next_value()?,
                         Field::Name => {
                             self.runner.name.set_if_ne(map.next_value::<Cow<str>>()?);
                         }
@@ -268,6 +277,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefinitonDeser<'a, 'py> {
                         Field::Bsp => {
                             let mut sp = self.runner.sp.borrow_mut(self.py);
                             sp.actual_sp = Some(map.next_value::<F64OrStr>()?.into());
+                        }
+                        Field::Id => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                        Field::Hc => {
+                            map.next_value::<IgnoredAny>()?;
                         }
                     }
                 }
@@ -335,19 +350,22 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeSeqDeser<'a, 'py> {
 
                 #[derive(Deserialize)]
                 struct RunnerWithID {
-                    id: SelectionID,
+                    id: u32,
+                    hc: Option<f32>,
                 }
 
                 while let Some(raw) = seq.next_element::<&RawValue>()? {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
-                    let rid: RunnerWithID =
+                    let parts: RunnerWithID =
                         serde_json::from_str(raw.get()).map_err(Error::custom)?;
+                    let rid = SelectionID::from((parts.id, parts.hc));
 
                     let index = self
                         .runners
                         .iter()
                         .map(|r| r.borrow_mut(self.py))
-                        .position(|r| r.selection_id == rid.id);
+                        .position(|r| r.selection_id == rid);
+
                     match index {
                         Some(index) => {
                             let mut runner =
@@ -433,7 +451,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'a, 'py> {
             {
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::Id => self.runner.selection_id = map.next_value()?,
                         Field::Atb => {
                             let mut ex = self.runner.ex.borrow_mut(self.py);
                             let atb = &mut ex.available_to_back;
@@ -480,9 +497,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'a, 'py> {
                             self.runner.last_price_traded =
                                 Some(map.next_value::<F64OrStr>()?.into())
                         }
-                        Field::Hc => {
-                            self.runner.handicap = Some(map.next_value::<F64OrStr>()?.into())
-                        }
                         // The betfair historic data files differ from the stream here, they send tv deltas
                         // that need to be accumulated, whereas the stream sends the value itself.
                         Field::Tv => {
@@ -491,6 +505,12 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'a, 'py> {
                             } else {
                                 self.runner.total_matched = map.next_value::<F64OrStr>()?.into();
                             }
+                        }
+                        Field::Id => {
+                            map.next_value::<IgnoredAny>()?;
+                        }
+                        Field::Hc => {
+                            map.next_value::<IgnoredAny>()?;
                         }
                     };
                 }

@@ -1,19 +1,20 @@
 use core::fmt;
 use pyo3::prelude::*;
-use serde::de::{DeserializeSeed, MapAccess, Visitor};
+use serde::de::{DeserializeSeed, Error, MapAccess, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use super::market_definition_runner::MarketDefinitionRunner;
+use super::runner_book::RunnerBook;
 use crate::bflw::market_definition_runner::RunnerDefSeq;
+use crate::datetime::DateTimeString;
 use crate::enums::{MarketBettingType, MarketStatus};
+use crate::errors::DataError;
 use crate::ids::{EventID, EventTypeID};
 use crate::immutable::container::SyncObj;
 use crate::market_source::SourceConfig;
 use crate::strings::FixedSizeString;
-use crate::datetime::DateTimeString;
-use super::market_definition_runner::MarketDefinitionRunner;
-use super::runner_book::RunnerBook;
 
 #[derive(Debug)]
 #[pyclass]
@@ -134,10 +135,12 @@ struct MarketDefinitionUpdate<'a> {
 }
 
 impl MarketDefinition {
-    fn new(change: MarketDefinitionUpdate) -> Self {
-        Self {
+    fn new(change: MarketDefinitionUpdate) -> Result<Self, DataError> {
+        Ok(Self {
             bet_delay: change.bet_delay.unwrap_or_default(),
-            betting_type: change.betting_type.unwrap_or_default(),
+            betting_type: change.betting_type.ok_or(DataError {
+                missing_field: "bettingType",
+            })?,
             regulators: change
                 .regulators
                 .map(|v| SyncObj::new(Arc::new(v.iter().map(|s| s.to_string()).collect())))
@@ -165,25 +168,31 @@ impl MarketDefinition {
             market_time: change
                 .market_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
-                .unwrap(),
+                .ok_or(DataError {
+                    missing_field: "marketTime",
+                })?,
             market_type: change
                 .market_type
                 .map(|s| SyncObj::new(Arc::from(s)))
-                .unwrap(),
+                .ok_or(DataError {
+                    missing_field: "marketType",
+                })?,
             timezone: change
                 .timezone
                 .map(|s| SyncObj::new(Arc::from(s)))
-                .unwrap(),
-            venue: change
-                .venue
-                .map(|s| SyncObj::new(Arc::from(s))),
+                .ok_or(DataError {
+                    missing_field: "timezone",
+                })?,
+            venue: change.venue.map(|s| SyncObj::new(Arc::from(s))),
             country_code: change
                 .country_code
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap())), // todo
             open_date: change
                 .open_date
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
-                .unwrap(),
+                .ok_or(DataError {
+                    missing_field: "openDate",
+                })?,
             settled_time: change
                 .settled_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
@@ -194,7 +203,7 @@ impl MarketDefinition {
             event_name: change
                 .event_name
                 .map(|s| SyncObj::new(Arc::from(s.into_owned()))),
-        }
+        })
     }
     fn update_from_change(&self, change: MarketDefinitionUpdate) -> Self {
         Self {
@@ -364,9 +373,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::TurnInPlayEnabled => {
                             let turn_in_play_enabled = map.next_value()?;
-                            if self.def.is_some_and(|def| {
-                                def.turn_in_play_enabled != turn_in_play_enabled
-                            }) || self.def.is_none()
+                            if self
+                                .def
+                                .is_some_and(|def| def.turn_in_play_enabled != turn_in_play_enabled)
+                                || self.def.is_none()
                             {
                                 upt.turn_in_play_enabled = Some(turn_in_play_enabled);
                                 changed = true;
@@ -594,8 +604,11 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 config: self.config,
                             })?;
 
-                            changed = d.is_some();
-                            upt.runners = d;
+                            if d.is_some() {
+                                upt.runners = d;
+                                changed = true;
+                            }
+
                             books = b;
                         }
                         Field::MarketType => {
@@ -611,9 +624,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::BettingType => {
                             let betting_type = map.next_value()?;
-                            if self
-                                .def
-                                .is_some_and(|def| def.betting_type != betting_type)
+                            if self.def.is_some_and(|def| def.betting_type != betting_type)
+                                || self.def.is_none()
                             {
                                 upt.betting_type = Some(betting_type);
                                 changed = true;
@@ -711,7 +723,13 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 
                 let def = match self.def {
                     Some(def) => changed.then(|| def.update_from_change(upt)),
-                    None => Some(MarketDefinition::new(upt)),
+                    None => {
+                        let def = MarketDefinition::new(upt).map_err(|err| {
+                            Error::custom(format!("missing required field <{}>", err.missing_field))
+                        })?;
+
+                        Some(def)
+                    }
                 };
 
                 Ok((def, books))

@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use serde::{
-    de::{self, DeserializeSeed, MapAccess, Visitor},
+    de::{self, DeserializeSeed, Error, MapAccess, Visitor},
     Deserialize, Deserializer,
 };
 use std::borrow::Cow;
@@ -120,6 +120,14 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
             where
                 V: MapAccess<'de>,
             {
+                // we need to make sure we see these fields - every field not marked optional
+                // should be present every time (including these). But some of these fields
+                // are sometimes missing. We should error on that case
+                let mut country_code = false;
+                let mut market_type = false;
+                let mut market_time = false;
+                let mut open_date = false;
+
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::BspMarket => self.def.bsp_market = map.next_value()?,
@@ -148,6 +156,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         Field::CountryCode => {
                             self.def.country_code = map.next_value::<FixedSizeString<2>>()?;
+                            country_code = true;
                         }
                         Field::Venue => {
                             self.def.venue.set_if_ne(map.next_value::<Cow<str>>()?);
@@ -183,6 +192,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         })?,
                         Field::MarketType => {
                             self.def.market_type.set_if_ne(map.next_value::<&str>()?);
+                            market_type = true;
                         }
                         Field::BettingType => self.def.betting_type = map.next_value()?,
                         Field::EachWayDivisor => {
@@ -195,6 +205,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
 
                                 self.def.market_time = dt;
                             }
+                            market_time = true;
                         }
                         Field::SuspendTime => {
                             let s = map.next_value::<&str>()?;
@@ -216,39 +227,56 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                                 let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
                                 self.def.open_date = dt;
                             }
+                            open_date = true;
                         }
                         Field::Regulators => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
+                            if self.def.regulators.is_empty() {
+                                self.def.regulators = map.next_value::<Vec<String>>()?;
+                            } else {
+                                let regs = map.next_value::<Vec<&str>>()?;
+
+                                if self.def.regulators.iter().ne(regs.iter()) {
+                                    self.def.regulators =
+                                        regs.iter().map(|s| s.to_string()).collect();
+                                }
+                            }
                         }
 
                         // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::RaceType => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::KeyLineDefiniton => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::PriceLadderDefinition => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::LineMaxUnit => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::LineMinUnit => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                         Field::LineInterval => {
                             map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.0.source, self.0.file);
                         }
                     }
                 }
-                Ok(())
+
+                // these are required fields that should always be present on a market - but sometimes
+                // are missing. We should error on this case
+                if !country_code {
+                    Err(Error::custom("missing required field <countryCode>"))
+                } else if !market_type {
+                    Err(Error::custom("missing required field <marketType>"))
+                } else if !market_time {
+                    Err(Error::custom("missing required field <marketTime>"))
+                } else if !open_date {
+                    Err(Error::custom("missing required field <openDate>"))
+                } else {
+                    Ok(())
+                }
             }
         }
 

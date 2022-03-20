@@ -287,20 +287,25 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                     let mut deser = serde_json::Deserializer::from_str(raw.get());
                     let mid: IdImg = serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
-                    let mb = {
-                        if mid.img.contains(&true) {
-                            None
-                        } else {
-                            next_books
-                                .iter()
-                                .find(|m| (*m).borrow(self.py).market_id.as_str() == mid.id)
-                                .or_else(|| {
-                                    self.markets.iter().find(|m| {
-                                        (*m).borrow(self.py).market_id.as_str() == mid.id
-                                    })
+                    let (mb, i) = {
+                        let i = next_books.iter()
+                            .position(|m| (*m).borrow(self.py).market_id.as_str() == mid.id);
+
+                        match i {
+                            Some(i) if !mid.img.contains(&true) => {
+                                (next_books.get(i).map(|m| m.borrow(self.py)), Some(i))
+                            },
+                            Some(i) if mid.img.contains(&true) => {
+                                (None, Some(i))
+                            },
+                            None if !mid.img.contains(&true) => {
+                                (self.markets.iter().find(|m| {
+                                    (*m).borrow(self.py).market_id.as_str() == mid.id
                                 })
-                                .map(|o| o.borrow(self.py))
-                        }
+                                .map(|o| o.borrow(self.py)), None)
+                            }
+                            _ => (None, None),
+                        }  
                     };
 
                     let next_m = MarketMc {
@@ -312,8 +317,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
                     .deserialize(&mut deser)
                     .map_err(Error::custom)?;
 
-                    if let Some(m) = next_m {
-                        next_books.push_back(Py::new(self.py, m).unwrap());
+                    match (next_m, i) {
+                        (Some(m), Some(i)) => next_books[i] = Py::new(self.py, m).unwrap(),
+                        (Some(m), None) => next_books.push_back(Py::new(self.py, m).unwrap()),
+                        _ => {}
                     }
                 }
 

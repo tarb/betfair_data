@@ -11,7 +11,7 @@ use std::fmt;
 use super::definition::{MarketDefinition, MarketDefinitionDeser};
 use crate::config::Config;
 use crate::datetime::DateTime;
-use crate::ids::{MarketID, Clk};
+use crate::ids::{Clk, MarketID};
 use crate::immutable::container::SyncObj;
 use crate::mutable::runner::{Runner, RunnerChangeSeqDeser};
 use crate::py_rep::PyRep;
@@ -337,15 +337,31 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeqDeser<'a, 'py> {
                     let mut deserializer = serde_json::Deserializer::from_str(raw.get());
                     let idimg: IdImg = serde_json::from_str(raw.get()).map_err(Error::custom)?;
 
-                    let market = self
-                        .markets
-                        .iter()
-                        .find(|m| (*m).borrow(self.py).market_id.as_str() == idimg.id)
-                        .map(|m| m.clone_ref(self.py));
+                    let (market, i) = {
+                        let i = next_books
+                            .iter()
+                            .position(|m| (*m).borrow(self.py).market_id.as_str() == idimg.id);
 
-                    if idimg.img.contains(&true) && let Some(market) = &market {
-                        market.borrow(self.py).clear(self.py);
-                    }
+                        match i {
+                            Some(i) if !idimg.img.contains(&true) => {
+                                (next_books.get(i).map(|m| m.clone_ref(self.py)), Some(i))
+                            }
+                            Some(i) if idimg.img.contains(&true) => (None, Some(i)),
+                            _ => {
+                                let m = self
+                                    .markets
+                                    .iter()
+                                    .find(|m| (*m).borrow(self.py).market_id.as_str() == idimg.id)
+                                    .map(|o| o.clone_ref(self.py));
+
+                                if idimg.img.contains(&true) && let Some(market) = &m {
+                                    market.borrow(self.py).clear(self.py);
+                                }
+
+                                (m, None)
+                            }
+                        }
+                    };
 
                     let market = PyMarketMc {
                         mid: idimg.id,
@@ -356,8 +372,10 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeqDeser<'a, 'py> {
                     .deserialize(&mut deserializer)
                     .map_err(Error::custom)?;
 
-                    if let Some(m) = market {
-                        next_books.push_back(m);
+                    match (market, i) {
+                        (Some(m), Some(i)) => next_books[i] = m,
+                        (Some(m), None) => next_books.push_back(m),
+                        _ => {}
                     }
                 }
 

@@ -22,10 +22,9 @@ def __repr__(self):
 
 #[pyclass]
 pub struct MarketDefinitionRunner {
+    selection_id: SelectionID,
     #[pyo3(get)]
     adjustment_factor: Option<f64>,
-    #[pyo3(get)]
-    selection_id: SelectionID,
     #[pyo3(get)]
     removal_date: Option<SyncObj<DateTimeString>>,
     #[pyo3(get)]
@@ -35,31 +34,43 @@ pub struct MarketDefinitionRunner {
     #[pyo3(get)]
     name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
-    handicap: FloatStr,
-    #[pyo3(get)]
     bsp: Option<FloatStr>,
+}
+
+#[pymethods]
+impl MarketDefinitionRunner {
+    #[getter(selection_id)]
+    fn get_selection_id(&self) -> u32 {
+        self.selection_id.id()
+    }
+    #[getter(handicap)]
+    fn get_handicap(&self) -> FloatStr {
+        let f = self.selection_id.handicap().unwrap_or(0.0);
+        FloatStr(f as f64)
+    }
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MarketDefRunnerUpdate<'a> {
-    pub id: SelectionID,
+    pub id: u32,
     pub adjustment_factor: Option<f64>,
     pub status: SelectionStatus,
     pub sort_priority: u16,
     pub name: Option<&'a str>,
     pub bsp: Option<FloatStr>,
     pub removal_date: Option<&'a str>,
-    pub hc: Option<FloatStr>,
+    pub hc: Option<f32>,
 }
 
 impl MarketDefinitionRunner {
     fn new(change: &MarketDefRunnerUpdate) -> Self {
+        let sid = SelectionID::from((change.id, change.hc));
+
         Self {
-            selection_id: change.id,
+            selection_id: sid,
             status: change.status,
             adjustment_factor: change.adjustment_factor,
-            handicap: change.hc.unwrap_or(FloatStr(0.0)),
             bsp: change.bsp,
             sort_priority: change.sort_priority,
             name: change.name.map(|s| SyncObj::new(Arc::from(s))),
@@ -74,7 +85,6 @@ impl MarketDefinitionRunner {
             || self.adjustment_factor != change.adjustment_factor
             || self.sort_priority != change.sort_priority
             || self.bsp != change.bsp
-            || !change.hc.contains(&self.handicap)
             || ((self.name.is_none() && change.name.is_some())
                 || self
                     .name
@@ -90,7 +100,6 @@ impl MarketDefinitionRunner {
             selection_id: self.selection_id,
             status: change.status,
             adjustment_factor: change.adjustment_factor.or(self.adjustment_factor),
-            handicap: change.hc.unwrap_or(self.handicap),
             bsp: change.bsp.or(self.bsp),
             sort_priority: if self.sort_priority != change.sort_priority {
                 change.sort_priority
@@ -170,17 +179,19 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                 let mut books: Option<Vec<Py<RunnerBook>>> = None;
 
                 while let Some(change) = seq.next_element::<MarketDefRunnerUpdate>()? {
+                    let sid = SelectionID::from((change.id, change.hc));
+
                     let index = {
                         (
                             self.defs.and_then(|rs| {
                                 rs.iter()
                                     .map(|r| r.borrow_mut(self.py))
-                                    .position(|r| r.selection_id == change.id)
+                                    .position(|r| r.selection_id == sid)
                             }),
                             self.books.and_then(|rs| {
                                 rs.iter()
                                     .map(|r| r.borrow_mut(self.py))
-                                    .position(|r| r.selection_id == change.id)
+                                    .position(|r| r.selection_id == sid)
                             }),
                         )
                     };
@@ -192,7 +203,8 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                     // marketRunnerDef
                     match (self.defs, index.0) {
                         (Some(from), Some(index)) => {
-                            let runner = unsafe { from.get_unchecked(index).borrow(self.py) };
+                            let pyr = unsafe { from.get_unchecked(index) };
+                            let runner = pyr.borrow(self.py);
 
                             if runner.would_change(&change) {
                                 match defs.as_mut() {
@@ -201,9 +213,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                             Py::new(self.py, runner.update_from_change(&change))
                                                 .unwrap(),
                                         );
-                                        // defs[index] =
-                                        //     Py::new(self.py, runner.update_from_change(&change))
-                                        //         .unwrap()
                                     }
                                     None => {
                                         defs = {
@@ -220,23 +229,20 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                                             );
                                             Some(defs)
                                         };
-
-                                        // defs = Some(
-                                        //     from.iter()
-                                        //         .enumerate()
-                                        //         .map(|(i, pr)| {
-                                        //             if index == i {
-                                        //                 Py::new(
-                                        //                     self.py,
-                                        //                     runner.update_from_change(&change),
-                                        //                 )
-                                        //                 .unwrap()
-                                        //             } else {
-                                        //                 pr.clone_ref(self.py)
-                                        //             }
-                                        //         })
-                                        //         .collect(),
-                                        // );
+                                    }
+                                };
+                            } else {
+                                match defs.as_mut() {
+                                    Some(defs) => defs.push(pyr.clone_ref(self.py)),
+                                    None => {
+                                        defs = {
+                                            let mut defs = Vec::with_capacity(std::cmp::min(
+                                                from.len() + 1,
+                                                10,
+                                            ));
+                                            defs.push(pyr.clone_ref(self.py));
+                                            Some(defs)
+                                        };
                                     }
                                 };
                             }
@@ -310,7 +316,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             }
                         }
                         (Some(from), None) => {
-                            let runner = RunnerBook::new(change.id, self.py);
+                            let runner = RunnerBook::new(sid, self.py);
                             let runner =
                                 Py::new(self.py, runner.update_from_def(&change, self.py)).unwrap();
 
@@ -327,7 +333,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             };
                         }
                         (None, None) => {
-                            let runner = RunnerBook::new(change.id, self.py);
+                            let runner = RunnerBook::new(sid, self.py);
                             let runner =
                                 Py::new(self.py, runner.update_from_def(&change, self.py)).unwrap();
 
