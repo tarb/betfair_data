@@ -99,14 +99,9 @@ impl MarketDefinitionRunner {
         Self {
             selection_id: self.selection_id,
             status: change.status,
-            adjustment_factor: change.adjustment_factor.or(self.adjustment_factor),
-            bsp: change.bsp.or(self.bsp),
-            sort_priority: if self.sort_priority != change.sort_priority {
-                change.sort_priority
-            } else {
-                self.sort_priority
-            },
-
+            adjustment_factor: change.adjustment_factor,
+            bsp: change.bsp,
+            sort_priority: change.sort_priority,
             name: change
                 .name
                 .and_then(|n| {
@@ -115,9 +110,7 @@ impl MarketDefinitionRunner {
                     } else {
                         Some(SyncObj::new(Arc::from(n)))
                     }
-                })
-                .or_else(|| self.name.clone()),
-
+                }),
             removal_date: change
                 .removal_date
                 .and_then(|n| {
@@ -126,8 +119,7 @@ impl MarketDefinitionRunner {
                     } else {
                         Some(SyncObj::new(DateTimeString::new(n).unwrap()))
                     }
-                })
-                .or_else(|| self.removal_date.clone()),
+                }),
         }
     }
 }
@@ -195,10 +187,6 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
                             }),
                         )
                     };
-
-                    // NOTE HERE (about commented out code)
-                    // bflw doesnt reuse the previous ordering of past MarketDefinitionRunners, and the resulting order
-                    // should be that of the new runnerdefs
 
                     // marketRunnerDef
                     match (self.defs, index.0) {

@@ -118,30 +118,8 @@ impl BflwFile {
             next_books
         };
 
-        // update the books for this files
         if let Some(next_books) = &next_books {
-            let py = slf.py();
-
-            let mut books = slf
-                .books
-                .iter()
-                .map(|b| b.clone_ref(py))
-                .collect::<Vec<_>>();
-            next_books.iter().for_each(|m1| {
-                let mb1 = m1.borrow(py);
-                let id1: &str = mb1.market_id.as_ref();
-
-                let replace = books
-                    .iter_mut()
-                    .position(|m2| id1 == (*m2).borrow(py).market_id);
-
-                match replace {
-                    Some(i) => books[i] = m1.clone_ref(py),
-                    None => books.push(m1.clone_ref(py)),
-                }
-            });
-
-            slf.books = books;
+            slf.books.clone_from(next_books);
         }
 
         next_books.map(|bs| bs.into_py(slf.py()))

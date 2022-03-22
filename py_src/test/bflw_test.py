@@ -16,7 +16,8 @@ import betfairlightweight.resources.bettingresources as bflw
 import betfairlightweight.resources.streamingresources as bflws
 
 #  paths to test files
-paths = glob("data/*OtherSports*")
+paths = glob("data/*Racing*")
+# paths = glob("data/*OtherSports*")
 # paths = [
 #     "data/2021_12_DecRacingAUPro.tar",
 #     "data/2021_10_OctRacingAUPro.tar",
@@ -58,19 +59,25 @@ def bflw_source(file_paths: Sequence[str]):
 def run_test():
     updates = 0
     files = 0
-    for (bfd_iter, bflw_gen) in zip(bfd_source, bflw_source(paths)): 
+    for (bfd_file, bflw_gen) in zip(bfd_source, bflw_source(paths)): 
         files += 1
+        # known broken file
+        if bfd_file.file_name == "data/2020_01_JanOtherSportsPro.tar/PRO/2020/Jan/26/29656798/1.167745383.bz2" or \
+           bfd_file.file_name == "data/2020_01_JanOtherSportsPro.tar/PRO/2020/Jan/26/29656798/29656798.bz2" or \
+           bfd_file.file_name == "data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/4/30970662/1.188544564.bz2":
+            continue
+        
         row = 0
 
-        for (bfd_mbs, bflw_mbs) in zip(bfd_iter, bflw_gen()):
+        for (bfd_mbs, bflw_mbs) in zip(bfd_file, bflw_gen()):
             row += 1
-            assert len(bflw_mbs) == len(bflw_mbs), f"{bfd_iter.file_name}:{row} <File> len market_books {[ m.market_id for m in bfd_mbs]} != {[ m.market_id for m in bflw_mbs]}"
+            assert len(bflw_mbs) == len(bflw_mbs), f"{bfd_file.file_name}:{row} <File> len market_books {[ m.market_id for m in bfd_mbs]} != {[ m.market_id for m in bflw_mbs]}"
             
             for (bfd_m, bflw_m) in zip(bfd_mbs, bflw_mbs):
                 bflw_m: bflw.MarketBook
                 updates += 1
-                test_MarketBook(bfd_m, bflw_m, bfd_iter.file_name, row)
-                print(f"Updates Tested {bfd_m.market_id} files:{files} updates:{updates}", end='\r')
+                test_MarketBook(bfd_m, bflw_m, bfd_file.file_name, row)
+        print(f"Updates Tested {bfd_file.file_name} files:{files} updates:{updates}", end='\r')
     print(f"Updates Tested files:{files} updates:{updates}")
 
 def test_MarketBook(bfd_m: bfd.MarketBook, bflw_m: bflw.MarketBook, file_name: str, row: int):

@@ -103,7 +103,7 @@ impl RunnerBook {
     pub fn would_change(&self, change: &MarketDefRunnerUpdate, py: Python) -> bool {
         self.status != change.status
             || self.adjustment_factor != change.adjustment_factor
-            || (change.bsp.is_some() && self.sp.borrow(py).actual_sp != change.bsp)
+            || self.sp.borrow(py).actual_sp != change.bsp
             || ((self.removal_date.is_none() && change.removal_date.is_some())
                 || self
                     .removal_date
@@ -111,14 +111,7 @@ impl RunnerBook {
     }
 
     pub fn update_from_def(&self, change: &MarketDefRunnerUpdate, py: Python) -> Self {
-        let (ex, sp) = if change.status == SelectionStatus::Removed
-            || change.status == SelectionStatus::RemovedVacant
-        {
-            (
-                Py::new(py, RunnerBookEX::default()).unwrap(),
-                self.sp.clone_ref(py),
-            )
-        } else if change.bsp.is_some() {
+        let (ex, sp) = if change.bsp.is_some() {
             // need to update sp obj with bsp value
             let sp = self.sp.borrow(py);
             if sp.actual_sp != change.bsp {

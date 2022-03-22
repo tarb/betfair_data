@@ -51,5 +51,5 @@ def run_with_rust_loading():
     print(f"Market {market_count} Update {update_count}")
 
 
-run_with_py_loading()
-# run_with_rust_loading()
+# run_with_py_loading()
+run_with_rust_loading()
