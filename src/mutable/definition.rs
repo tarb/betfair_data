@@ -6,14 +6,14 @@ use serde::{
 use std::borrow::Cow;
 use std::fmt;
 
-use crate::config::Config;
 use crate::datetime::DateTimeString;
 use crate::enums::{MarketBettingType, MarketStatus};
 use crate::ids::{EventID, EventTypeID};
 use crate::mutable::runner::{Runner, RunnerDefSeqDeser};
 use crate::strings::{FixedSizeString, StringSetExtNeq};
+use crate::{config::Config, errors::DataError};
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct MarketDefinition {
     pub bet_delay: u16,
     pub bsp_market: bool,
@@ -21,7 +21,6 @@ pub struct MarketDefinition {
     pub complete: bool,
     pub cross_matching: bool,
     pub discount_allowed: bool,
-    pub each_way_divisor: Option<f64>,
     pub event_id: EventID,
     pub event_name: Option<String>,
     pub event_type_id: EventTypeID,
@@ -43,19 +42,295 @@ pub struct MarketDefinition {
     pub open_date: DateTimeString,
     pub suspend_time: Option<DateTimeString>,
     pub settled_time: Option<DateTimeString>,
-    pub country_code: FixedSizeString<2>,
+    pub country_code: Option<FixedSizeString<2>>,
     pub regulators: Vec<String>,
+    pub race_type: Option<String>,
+    pub each_way_divisor: Option<f64>,
+}
+
+#[derive(Debug, Default)]
+struct MarketDefinitionUpdate<'a> {
+    bet_delay: Option<u16>,
+    betting_type: Option<MarketBettingType>,
+    bsp_market: Option<bool>,
+    bsp_reconciled: Option<bool>,
+    complete: Option<bool>,
+    cross_matching: Option<bool>,
+    discount_allowed: Option<bool>,
+    event_id: Option<EventID>,
+    event_type_id: Option<EventTypeID>,
+    in_play: Option<bool>,
+    market_base_rate: Option<f32>,
+    market_time: Option<&'a str>,
+    market_type: Option<&'a str>,
+    number_of_active_runners: Option<u16>,
+    number_of_winners: Option<u8>,
+    open_date: Option<&'a str>,
+    persistence_enabled: Option<bool>,
+    regulators: Option<Vec<&'a str>>,
+    runners_voidable: Option<bool>,
+    settled_time: Option<&'a str>,
+    status: Option<MarketStatus>,
+    suspend_time: Option<&'a str>,
+    timezone: Option<&'a str>,
+    turn_in_play_enabled: Option<bool>,
+    venue: Option<&'a str>,
+    version: Option<u64>,
+    country_code: Option<&'a str>,
+    market_name: Option<Cow<'a, str>>,
+    event_name: Option<Cow<'a, str>>,
+    race_type: Option<&'a str>,
+    each_way_divisor: Option<f64>,
+}
+
+impl<'a, 'b> MarketDefinitionUpdate<'a> {
+    fn create(self) -> Result<MarketDefinition, DataError> {
+        Ok(MarketDefinition {
+            bet_delay: self.bet_delay.ok_or(DataError {
+                missing_field: "betDelay",
+            })?,
+            betting_type: self.betting_type.ok_or(DataError {
+                missing_field: "bettingType",
+            })?,
+            regulators: self
+                .regulators
+                .map(|v| v.iter().map(|s| s.to_string()).collect())
+                .ok_or(DataError {
+                    missing_field: "regulators",
+                })?,
+            bsp_reconciled: self.bsp_reconciled.ok_or(DataError {
+                missing_field: "bspReconciled",
+            })?,
+            bsp_market: self.bsp_market.ok_or(DataError {
+                missing_field: "bspMarket",
+            })?,
+            complete: self.complete.ok_or(DataError {
+                missing_field: "complete",
+            })?,
+            cross_matching: self.cross_matching.ok_or(DataError {
+                missing_field: "crossMatching",
+            })?,
+            discount_allowed: self.discount_allowed.ok_or(DataError {
+                missing_field: "discountAllowed",
+            })?,
+            event_id: self.event_id.ok_or(DataError {
+                missing_field: "eventId",
+            })?,
+            event_type_id: self.event_type_id.ok_or(DataError {
+                missing_field: "eventTypeId",
+            })?,
+            in_play: self.in_play.ok_or(DataError {
+                missing_field: "inPlay",
+            })?,
+            market_base_rate: self.market_base_rate.ok_or(DataError {
+                missing_field: "marketBaseRate",
+            })?,
+            number_of_winners: self.number_of_winners.ok_or(DataError {
+                missing_field: "numberOfWinners",
+            })?,
+            persistence_enabled: self.persistence_enabled.ok_or(DataError {
+                missing_field: "persistenceEnabled",
+            })?,
+            runners_voidable: self.runners_voidable.ok_or(DataError {
+                missing_field: "runnersVoidable",
+            })?,
+            version: self.version.ok_or(DataError {
+                missing_field: "version",
+            })?,
+            status: self.status.ok_or(DataError {
+                missing_field: "status",
+            })?,
+            turn_in_play_enabled: self.turn_in_play_enabled.ok_or(DataError {
+                missing_field: "turnInPlayEnabled",
+            })?,
+            number_of_active_runners: self.number_of_active_runners.ok_or(DataError {
+                missing_field: "numberOfActiveRunners",
+            })?,
+            market_time: self
+                .market_time
+                .map(|s| DateTimeString::new(s).unwrap())
+                .ok_or(DataError {
+                    missing_field: "marketTime",
+                })?,
+            market_type: self.market_type.map(|s| s.to_owned()).ok_or(DataError {
+                missing_field: "marketType",
+            })?,
+            timezone: self.timezone.map(|s| s.to_owned()).ok_or(DataError {
+                missing_field: "timezone",
+            })?,
+            venue: self.venue.map(|s| s.to_owned()),
+            country_code: self
+                .country_code
+                .map(|s| FixedSizeString::try_from(s).unwrap()), // too
+            open_date: self
+                .open_date
+                .map(|s| DateTimeString::new(s).unwrap())
+                .ok_or(DataError {
+                    missing_field: "openDate",
+                })?,
+            settled_time: self.settled_time.map(|s| DateTimeString::new(s).unwrap()),
+            suspend_time: self.suspend_time.map(|s| DateTimeString::new(s).unwrap()),
+            market_name: self.market_name.map(|s| s.into_owned()),
+            event_name: self.event_name.map(|s| s.into_owned()),
+            race_type: self.race_type.map(|s| s.to_string()),
+            each_way_divisor: self.each_way_divisor,
+        })
+    }
+
+    fn update(self, market: &mut MarketDefinition) -> Result<(), DataError> {
+        market.bet_delay = self.bet_delay.ok_or(DataError {
+            missing_field: "betDelay",
+        })?;
+        market.betting_type = self.betting_type.ok_or(DataError {
+            missing_field: "bettingType",
+        })?;
+        market.bsp_market = self.bsp_market.ok_or(DataError {
+            missing_field: "bspMarket",
+        })?;
+        market.bsp_reconciled = self.bsp_reconciled.ok_or(DataError {
+            missing_field: "bspReconciled",
+        })?;
+        market.complete = self.complete.ok_or(DataError {
+            missing_field: "complete",
+        })?;
+        market.cross_matching = self.cross_matching.ok_or(DataError {
+            missing_field: "crossMatching",
+        })?;
+        market.discount_allowed = self.discount_allowed.ok_or(DataError {
+            missing_field: "discountAllowed",
+        })?;
+        market.event_id = self.event_id.ok_or(DataError {
+            missing_field: "eventId",
+        })?;
+        market.event_type_id = self.event_type_id.ok_or(DataError {
+            missing_field: "eventTypeId",
+        })?;
+        market.in_play = self.in_play.ok_or(DataError {
+            missing_field: "inPlay",
+        })?;
+        market.market_base_rate = self.market_base_rate.ok_or(DataError {
+            missing_field: "marketBaseRate",
+        })?;
+        market.number_of_winners = self.number_of_winners.ok_or(DataError {
+            missing_field: "numberOfWinners",
+        })?;
+        market.persistence_enabled = self.persistence_enabled.ok_or(DataError {
+            missing_field: "persistenceEnabled",
+        })?;
+        market.runners_voidable = self.runners_voidable.ok_or(DataError {
+            missing_field: "runnersVoidable",
+        })?;
+        market.version = self.version.ok_or(DataError {
+            missing_field: "version",
+        })?;
+        market.status = self.status.ok_or(DataError {
+            missing_field: "status",
+        })?;
+        market.turn_in_play_enabled = self.turn_in_play_enabled.ok_or(DataError {
+            missing_field: "turnInPlayEnabled",
+        })?;
+        market.number_of_active_runners = self.number_of_active_runners.ok_or(DataError {
+            missing_field: "numberOfActiveRunners",
+        })?;
+        market.timezone.set_if_ne(self.timezone.ok_or(DataError {
+            missing_field: "timezone",
+        })?);
+        market
+            .market_type
+            .set_if_ne(self.market_type.ok_or(DataError {
+                missing_field: "marketType",
+            })?);
+        market.market_time = self
+            .market_time
+            .map(|s| {
+                if market.market_time.as_str() != s {
+                    DateTimeString::new(s).unwrap()
+                } else {
+                    market.market_time
+                }
+            })
+            .ok_or(DataError {
+                missing_field: "marketTime",
+            })?;
+
+        market.open_date = self
+            .open_date
+            .map(|s| {
+                if market.open_date.as_str() != s {
+                    DateTimeString::new(s).unwrap()
+                } else {
+                    market.open_date
+                }
+            })
+            .ok_or(DataError {
+                missing_field: "openDate",
+            })?;
+        let regs = self.regulators.ok_or(DataError {
+            missing_field: "regulators",
+        })?;
+        if regs.iter().ne(market.regulators.iter()) {
+            market.regulators = regs.iter().map(|s| s.to_string()).collect();
+        }
+
+        // below fields are optionally required
+
+        // country code should be requried, but is missing ofter :/
+        market.country_code = self
+            .country_code
+            .map(|cc| FixedSizeString::try_from(cc).unwrap());
+
+        market.settled_time = self.settled_time.and_then(|s| {
+            if market.settled_time.is_some_and(|dts| dts != s) {
+                Some(DateTimeString::new(s).unwrap())
+            } else {
+                market.settled_time
+            }
+        });
+
+        market.suspend_time = self.suspend_time.and_then(|s| {
+            if market.suspend_time.is_some_and(|dts| dts != s) {
+                Some(DateTimeString::new(s).unwrap())
+            } else {
+                market.suspend_time
+            }
+        });
+
+        market.each_way_divisor = self.each_way_divisor;
+
+        if let Some(race_type) = self.race_type {
+            market.race_type.set_if_ne(race_type);
+        } else {
+            market.race_type = None;
+        }
+        if let Some(venue) = self.venue {
+            market.venue.set_if_ne(venue);
+        } else {
+            market.race_type = None;
+        }
+        if let Some(market_name) = self.market_name {
+            market.market_name.set_if_ne(market_name);
+        } else {
+            market.race_type = None;
+        }
+        if let Some(event_name) = self.event_name {
+            market.event_name.set_if_ne(event_name);
+        } else {
+            market.race_type = None;
+        }
+
+        Ok(())
+    }
 }
 
 // Used for serializing in place over the mc marketDefinition object
 pub struct MarketDefinitionDeser<'a, 'py> {
-    pub def: &'a mut MarketDefinition,
+    pub def: Option<&'a mut MarketDefinition>,
     pub runners: &'a mut Vec<Py<Runner>>,
     pub config: Config,
     pub py: Python<'py>,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
-    type Value = ();
+    type Value = Option<MarketDefinition>;
 
     fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
@@ -104,147 +379,131 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
         }
 
         struct MarketDefinitionVisitorDeser<'a, 'py> {
-            def: &'a mut MarketDefinition,
+            def: Option<&'a mut MarketDefinition>,
             runners: &'a mut Vec<Py<Runner>>,
             config: Config,
             py: Python<'py>,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitorDeser<'a, 'py> {
-            type Value = ();
+            type Value = Option<MarketDefinition>;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("")
             }
 
-            fn visit_map<V>(mut self, mut map: V) -> Result<Self::Value, V::Error>
+            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
             where
                 V: MapAccess<'de>,
             {
-                // we need to make sure we see these fields - every field not marked optional
-                // should be present every time (including these). But some of these fields
-                // are sometimes missing. We should error on that case
-                let mut country_code = false;
-                let mut market_type = false;
-                let mut market_time = false;
-                let mut open_date = false;
+                let mut upt: MarketDefinitionUpdate = MarketDefinitionUpdate::default();
 
                 while let Some(key) = map.next_key()? {
                     match key {
-                        Field::BspMarket => self.def.bsp_market = map.next_value()?,
-                        Field::TurnInPlayEnabled => {
-                            self.def.turn_in_play_enabled = map.next_value()?
-                        }
-                        Field::InPlay => self.def.in_play = map.next_value()?,
-                        Field::PersistenceEnabled => {
-                            self.def.persistence_enabled = map.next_value()?
-                        }
-                        Field::BspReconciled => self.def.bsp_reconciled = map.next_value()?,
-                        Field::Complete => self.def.complete = map.next_value()?,
-                        Field::CrossMatching => self.def.cross_matching = map.next_value()?,
-                        Field::RunnersVoidable => self.def.runners_voidable = map.next_value()?,
-                        Field::DiscountAllowed => self.def.discount_allowed = map.next_value()?,
-                        Field::Timezone => {
-                            self.def.timezone.set_if_ne(map.next_value::<&str>()?);
-                        }
-                        Field::Name => {
-                            self.def
-                                .market_name
-                                .set_if_ne(map.next_value::<Cow<str>>()?);
-                        }
-                        Field::EventName => {
-                            self.def.event_name.set_if_ne(map.next_value::<Cow<str>>()?);
-                        }
-                        Field::CountryCode => {
-                            self.def.country_code = map.next_value::<FixedSizeString<2>>()?;
-                            country_code = true;
-                        }
-                        Field::Venue => {
-                            self.def.venue.set_if_ne(map.next_value::<Cow<str>>()?);
-                        }
-                        Field::Status => self.def.status = map.next_value()?,
-                        Field::MarketBaseRate => {
-                            self.def.market_base_rate = map.next_value::<f32>()?
-                        }
-                        Field::NumberOfWinners => {
-                            self.def.number_of_winners = map.next_value::<f32>()? as u8
-                        }
-                        Field::NumberOfActiveRunners => {
-                            self.def.number_of_active_runners = map.next_value()?
-                        }
-                        Field::BetDelay => self.def.bet_delay = map.next_value()?,
-                        Field::EventId => {
-                            self.def.event_id = map
-                                .next_value::<&str>()?
-                                .parse()
-                                .map_err(de::Error::custom)?;
-                        }
-                        Field::EventTypeId => {
-                            self.def.event_type_id = map
-                                .next_value::<&str>()?
-                                .parse()
-                                .map_err(de::Error::custom)?;
-                        }
-                        Field::Version => self.def.version = map.next_value()?,
                         Field::Runners => map.next_value_seed(RunnerDefSeqDeser {
                             runners: self.runners,
                             config: self.config,
                             py: self.py,
                         })?,
-                        Field::MarketType => {
-                            self.def.market_type.set_if_ne(map.next_value::<&str>()?);
-                            market_type = true;
+                        Field::Regulators => {
+                            upt.regulators = Some(map.next_value::<Vec<&str>>()?);
                         }
-                        Field::BettingType => self.def.betting_type = map.next_value()?,
-                        Field::EachWayDivisor => {
-                            self.def.each_way_divisor = Some(map.next_value::<f64>()?)
+                        Field::BspMarket => {
+                            upt.bsp_market = Some(map.next_value::<bool>()?);
+                        }
+                        Field::TurnInPlayEnabled => {
+                            upt.turn_in_play_enabled = Some(map.next_value::<bool>()?);
+                        }
+                        Field::InPlay => {
+                            upt.in_play = Some(map.next_value::<bool>()?);
+                        }
+                        Field::PersistenceEnabled => {
+                            upt.persistence_enabled = Some(map.next_value::<bool>()?);
+                        }
+                        Field::BspReconciled => {
+                            upt.bsp_reconciled = Some(map.next_value::<bool>()?);
+                        }
+                        Field::Complete => {
+                            upt.complete = Some(map.next_value::<bool>()?);
+                        }
+                        Field::CrossMatching => {
+                            upt.cross_matching = Some(map.next_value::<bool>()?);
+                        }
+                        Field::RunnersVoidable => {
+                            upt.runners_voidable = Some(map.next_value::<bool>()?);
+                        }
+                        Field::DiscountAllowed => {
+                            upt.discount_allowed = Some(map.next_value::<bool>()?);
+                        }
+                        Field::Timezone => {
+                            upt.timezone = Some(map.next_value::<&str>()?);
+                        }
+                        Field::Name => {
+                            upt.market_name = Some(map.next_value::<Cow<str>>()?);
+                        }
+                        Field::EventName => {
+                            upt.event_name = Some(map.next_value::<Cow<str>>()?);
+                        }
+                        Field::CountryCode => {
+                            upt.country_code = Some(map.next_value::<&str>()?);
+                        }
+                        Field::Venue => {
+                            upt.venue = Some(map.next_value::<&str>()?);
+                        }
+                        Field::Status => {
+                            upt.status = Some(map.next_value::<MarketStatus>()?);
+                        }
+                        Field::MarketBaseRate => {
+                            upt.market_base_rate = Some(map.next_value::<f32>()?);
+                        }
+                        Field::NumberOfWinners => {
+                            upt.number_of_winners = Some(map.next_value::<f32>()? as u8);
+                        }
+                        Field::NumberOfActiveRunners => {
+                            upt.number_of_active_runners = Some(map.next_value::<u16>()?);
+                        }
+                        Field::BetDelay => {
+                            upt.bet_delay = Some(map.next_value::<u16>()?);
+                        }
+                        Field::EventId => {
+                            upt.event_id = Some(
+                                map.next_value::<&str>()?
+                                    .parse()
+                                    .map_err(de::Error::custom)?,
+                            );
+                        }
+                        Field::EventTypeId => {
+                            upt.event_type_id = Some(
+                                map.next_value::<&str>()?
+                                    .parse()
+                                    .map_err(de::Error::custom)?,
+                            );
+                        }
+                        Field::Version => {
+                            upt.version = Some(map.next_value::<u64>()?);
+                        }
+                        Field::MarketType => {
+                            upt.market_type = Some(map.next_value::<&str>()?);
+                        }
+                        Field::BettingType => {
+                            upt.betting_type = Some(map.next_value::<MarketBettingType>()?);
                         }
                         Field::MarketTime => {
-                            let s = map.next_value::<&str>()?;
-                            if &self.def.market_time != s {
-                                let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
-
-                                self.def.market_time = dt;
-                            }
-                            market_time = true;
+                            upt.market_time = Some(map.next_value::<&str>()?);
                         }
                         Field::SuspendTime => {
-                            let s = map.next_value::<&str>()?;
-                            if !self.def.suspend_time.contains(&s) {
-                                let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
-                                self.def.suspend_time = Some(dt);
-                            }
+                            upt.suspend_time = Some(map.next_value::<&str>()?);
                         }
                         Field::SettledTime => {
-                            let s = map.next_value::<&str>()?;
-                            if !self.def.settled_time.contains(&s) {
-                                let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
-                                self.def.settled_time = Some(dt);
-                            }
+                            upt.settled_time = Some(map.next_value::<&str>()?);
                         }
                         Field::OpenDate => {
-                            let s = map.next_value::<&str>()?;
-                            if &self.def.open_date != s {
-                                let dt = DateTimeString::new(s).map_err(de::Error::custom)?;
-                                self.def.open_date = dt;
-                            }
-                            open_date = true;
+                            upt.open_date = Some(map.next_value::<&str>()?);
                         }
-                        Field::Regulators => {
-                            if self.def.regulators.is_empty() {
-                                self.def.regulators = map.next_value::<Vec<String>>()?;
-                            } else {
-                                let regs = map.next_value::<Vec<&str>>()?;
-
-                                if self.def.regulators.iter().ne(regs.iter()) {
-                                    self.def.regulators =
-                                        regs.iter().map(|s| s.to_string()).collect();
-                                }
-                            }
+                        Field::EachWayDivisor => {
+                            upt.each_way_divisor = Some(map.next_value::<f64>()?);
                         }
-
-                        // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::RaceType => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
+                            upt.race_type = Some(map.next_value::<&str>()?);
                         }
                         Field::KeyLineDefiniton => {
                             map.next_value::<serde::de::IgnoredAny>()?;
@@ -264,18 +523,21 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                     }
                 }
 
-                // these are required fields that should always be present on a market - but sometimes
-                // are missing. We should error on this case
-                if !country_code {
-                    Err(Error::custom("missing required field <countryCode>"))
-                } else if !market_type {
-                    Err(Error::custom("missing required field <marketType>"))
-                } else if !market_time {
-                    Err(Error::custom("missing required field <marketTime>"))
-                } else if !open_date {
-                    Err(Error::custom("missing required field <openDate>"))
-                } else {
-                    Ok(())
+                match self.def {
+                    Some(def) => {
+                        upt.update(def).map_err(|err| {
+                            Error::custom(format!("missing required field <{}>", err.missing_field))
+                        })?;
+
+                        Ok(None)
+                    }
+                    None => {
+                        let def = upt.create().map_err(|err| {
+                            Error::custom(format!("missing required field <{}>", err.missing_field))
+                        })?;
+
+                        Ok(Some(def))
+                    }
                 }
             }
         }

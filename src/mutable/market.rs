@@ -16,7 +16,6 @@ use crate::immutable::container::SyncObj;
 use crate::mutable::runner::{Runner, RunnerChangeSeqDeser};
 use crate::py_rep::PyRep;
 
-#[derive(Default)]
 #[pyclass(name = "MarketMut")]
 pub struct MarketMut {
     #[pyo3(get)]
@@ -33,14 +32,19 @@ pub struct MarketMut {
 }
 
 impl MarketMut {
-    fn new(market_id: MarketID) -> Self {
+    fn new(
+        market_id: MarketID,
+        def: MarketDefinition,
+        runners: Vec<Py<Runner>>,
+        total_matched: f64,
+    ) -> Self {
         Self {
             market_id: SyncObj::new(market_id),
             clk: Default::default(),
             publish_time: Default::default(),
-            total_matched: Default::default(),
-            runners: Default::default(),
-            def: Default::default(),
+            total_matched,
+            runners,
+            def,
         }
     }
 
@@ -81,8 +85,8 @@ impl MarketMut {
         self.clk.as_ref()
     }
     #[getter(country_code)]
-    fn get_country_code(&self) -> &str {
-        self.def.country_code.as_str()
+    fn get_country_code(&self, py: Python) -> PyObject {
+        self.def.country_code.map(|cc| cc.py_rep(py)).unwrap_or_else(|| py.None())
     }
     #[getter(event_id)]
     fn get_event_id(&self) -> u32 {
@@ -135,6 +139,10 @@ impl MarketMut {
     #[getter(market_type)]
     fn get_market_type(&self, py: Python) -> PyObject {
         self.def.market_type.to_object(py)
+    }
+    #[getter(race_type)]
+    fn get_race_type(&self, py: Python) -> PyObject {
+        self.def.race_type.to_object(py)
     }
     #[getter(market_name)]
     fn get_market_name(&self, py: Python) -> PyObject {
@@ -437,56 +445,102 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
             where
                 V: MapAccess<'de>,
             {
-                let market = self
-                    .market
-                    .unwrap_or_else(|| Py::new(self.py, MarketMut::new(self.mid)).unwrap());
+                match self.market {
+                    Some(market) => {
+                        let m = &mut *market.borrow_mut(self.py);
 
-                {
-                    let m = &mut *market.borrow_mut(self.py);
-
-                    while let Some(key) = map.next_key()? {
-                        match key {
-                            Field::MarketDefinition => {
-                                map.next_value_seed(MarketDefinitionDeser {
-                                    def: &mut m.def,
-                                    runners: &mut m.runners,
-                                    config: self.config,
-                                    py: self.py,
-                                })?;
-                            }
-                            Field::Rc => {
-                                map.next_value_seed(RunnerChangeSeqDeser {
-                                    runners: &mut m.runners,
-                                    config: self.config,
-                                    py: self.py,
-                                })?;
-
-                                // if cumulative_runner_tv is on, then tv shouldnt be sent at a market level and will have
-                                // to be derived from the sum of runner tv's. This happens when using the data provided
-                                // from betfair historical data service, not saved from the actual stream
-                                if self.config.cumulative_runner_tv {
-                                    m.total_matched = m
-                                        .runners
-                                        .iter()
-                                        .map(|r| r.borrow(self.py).total_matched)
-                                        .sum();
+                        while let Some(key) = map.next_key()? {
+                            match key {
+                                Field::MarketDefinition => {
+                                    map.next_value_seed(MarketDefinitionDeser {
+                                        def: Some(&mut m.def),
+                                        runners: &mut m.runners,
+                                        config: self.config,
+                                        py: self.py,
+                                    })?;
                                 }
-                            }
-                            Field::Tv => {
-                                if !self.config.cumulative_runner_tv {
-                                    m.total_matched += map.next_value::<f64>()?;
-                                } else {
+                                Field::Rc => {
+                                    map.next_value_seed(RunnerChangeSeqDeser {
+                                        runners: &mut m.runners,
+                                        config: self.config,
+                                        py: self.py,
+                                    })?;
+
+                                    if self.config.cumulative_runner_tv {
+                                        m.total_matched = m
+                                            .runners
+                                            .iter()
+                                            .map(|r| r.borrow(self.py).total_matched)
+                                            .sum();
+                                    }
+                                }
+                                Field::Tv => {
+                                    if !self.config.cumulative_runner_tv {
+                                        m.total_matched +=
+                                            map.next_value::<f64>()?;
+                                    } else {
+                                        map.next_value::<IgnoredAny>()?;
+                                    }
+                                }
+                                _ => {
                                     map.next_value::<IgnoredAny>()?;
                                 }
                             }
-                            _ => {
-                                map.next_value::<IgnoredAny>()?;
+                        }
+
+                        Ok(Some(market.clone_ref(self.py)))
+                    }
+                    None => {
+                        let mut def = None;
+                        let mut runners = Vec::with_capacity(12);
+                        let mut total_matched = 0.0;
+
+                        while let Some(key) = map.next_key()? {
+                            match key {
+                                Field::MarketDefinition => {
+                                    def = map.next_value_seed(MarketDefinitionDeser {
+                                        def: None,
+                                        runners: &mut runners,
+                                        config: self.config,
+                                        py: self.py,
+                                    })?;
+                                }
+                                Field::Rc => {
+                                    map.next_value_seed(RunnerChangeSeqDeser {
+                                        runners: &mut runners,
+                                        config: self.config,
+                                        py: self.py,
+                                    })?;
+
+                                    if self.config.cumulative_runner_tv {
+                                        total_matched = runners
+                                            .iter()
+                                            .map(|r| r.borrow(self.py).total_matched)
+                                            .sum();
+                                    }
+                                }
+                                Field::Tv => {
+                                    if !self.config.cumulative_runner_tv {
+                                        total_matched += map.next_value::<f64>()?;
+                                    } else {
+                                        map.next_value::<IgnoredAny>()?;
+                                    }
+                                }
+                                _ => {
+                                    map.next_value::<IgnoredAny>()?;
+                                }
                             }
                         }
+
+                        let def = def.ok_or_else(|| {
+                            Error::custom("No MarketDefinition when creating market.")
+                        })?;
+                        let m = MarketMut::new(self.mid, def, runners, total_matched);
+                        let py_m = Py::new(self.py, m).unwrap();
+
+                        Ok(Some(py_m))
                     }
                 }
-
-                Ok(Some(market))
             }
         }
 

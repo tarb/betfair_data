@@ -20,35 +20,6 @@ pub struct RunnerBookSP {
     pub lay_liability_taken: SyncObj<Arc<Vec<PriceSize>>>,
 }
 
-#[derive(Default)]
-pub struct RunnerBookSPUpdate {
-    pub actual_sp: Option<FloatStr>,
-    pub far_price: Option<FloatStr>,
-    pub near_price: Option<FloatStr>,
-    pub back_stake_taken: Option<Vec<PriceSize>>,
-    pub lay_liability_taken: Option<Vec<PriceSize>>,
-}
-
-impl RunnerBookSP {
-    pub fn update(&self, update: RunnerBookSPUpdate, py: Python) -> Py<Self> {
-        Py::new(
-            py,
-            Self {
-                actual_sp: update.actual_sp.or(self.actual_sp),
-                far_price: update.far_price.or(self.far_price),
-                near_price: update.near_price.or(self.near_price),
-                back_stake_taken: update
-                    .back_stake_taken
-                    .map_or_else(|| self.back_stake_taken.clone(), |ps| SyncObj::new(Arc::new(ps))),
-                lay_liability_taken: update
-                    .lay_liability_taken
-                    .map_or_else(|| self.lay_liability_taken.clone(), |ps| SyncObj::new(Arc::new(ps))),
-            },
-        )
-        .unwrap()
-    }
-}
-
 #[pymethods]
 impl RunnerBookSP {
     #[getter(back_stake_taken)]

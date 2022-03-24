@@ -43,6 +43,7 @@ def start_test():
             assert m.in_play == i.in_play, f"<Market> in_play {m.in_play} != {i.in_play}"
             assert m.market_base_rate == i.market_base_rate, f"<Market> market_base_rate {m.market_base_rate} != {i.market_base_rate}"
             assert m.market_type == i.market_type, f"<Market> market_type {m.market_type} != {i.market_type}"
+            assert m.race_type == i.race_type, f"<Market> race_type {m.race_type} != {i.race_type}"
             assert m.market_name == i.market_name, f"<Market> market_name {m.market_name} != {i.market_name}"
             assert m.number_of_active_runners == i.number_of_active_runners, f"<Market> number_of_active_runners {m.number_of_active_runners} != {i.number_of_active_runners}"
             assert m.number_of_winners == i.number_of_winners, f"<Market> number_of_winners {m.number_of_winners} != {i.number_of_winners}"
@@ -77,7 +78,7 @@ def start_test():
                 test_RunnerBookSP(mr.sp, ir.sp, mr.selection_id)
 
             update_count += 1
-            print(f"Market {market_count} Update {update_count}", end='\r')
+        print(f"Market {market_count} Update {update_count}", end='\r')
 
 def test_RunnerBookSP(sp1: bfd.RunnerBookSP, sp2: bfd.RunnerBookSP, sid: int):
     assert test_float(sp1.far_price, sp2.far_price), f"<RunnerBookSP> far_price {sp1.far_price} != {sp2.far_price}"
@@ -103,7 +104,5 @@ def test_float(f1: float|NoneType, f2: float|NoneType) -> bool:
 def print_ladder(ladder: List[bfd.PriceSize]) -> str:
     return ' '.join(list(f"[{ps.price}, {ps.size}]" for ps in ladder))
 
-try:
-    start_test()
-except: 
-    print("derp")
+
+start_test()

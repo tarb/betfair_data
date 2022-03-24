@@ -49,6 +49,7 @@ class Market():
     persistence_enabled: bool
     publish_time: datetime
     """Publish Time (in millis since epoch) that the changes were generated"""
+    race_type: Optional[str]
     runners_voidable: bool
     runners: List[Runner]   
     regulators: List[str]

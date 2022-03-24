@@ -75,6 +75,8 @@ pub struct MarketDefinition {
     pub name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
     pub event_name: Option<SyncObj<Arc<str>>>,
+    #[pyo3(get)]
+    pub race_type: Option<SyncObj<Arc<str>>>,
 
     // use getters to turn these into strings
     pub event_id: EventID,
@@ -115,6 +117,7 @@ struct MarketDefinitionUpdate<'a> {
     market_base_rate: Option<f32>,
     market_time: Option<&'a str>,
     market_type: Option<&'a str>,
+    race_type: Option<&'a str>,
     number_of_active_runners: Option<u16>,
     number_of_winners: Option<u8>,
     open_date: Option<&'a str>,
@@ -237,12 +240,14 @@ impl MarketDefinition {
             suspend_time: change
                 .suspend_time
                 .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
-            name: change.name.map(|s| SyncObj::new(Arc::from(s.into_owned()))),
+            name: change.name.map(|s| SyncObj::new(Arc::from(s.as_ref()))),
+            race_type: change.race_type.map(|s| SyncObj::new(Arc::from(s))),
             event_name: change
                 .event_name
-                .map(|s| SyncObj::new(Arc::from(s.into_owned()))),
+                .map(|s| SyncObj::new(Arc::from(s.as_ref()))),
         })
     }
+
     fn update_from_change(&self, change: MarketDefinitionUpdate) -> Result<Self, DataError> {
         Ok(Self {
             bet_delay: change.bet_delay.ok_or(DataError {
@@ -391,7 +396,7 @@ impl MarketDefinition {
                 if self.name.is_some_and(|name| name.as_ref() == n.as_ref()) {
                     self.name.clone()
                 } else {
-                    Some(SyncObj::new(Arc::from(n.into_owned())))
+                    Some(SyncObj::new(Arc::from(n.as_ref())))
                 }
             }),
             event_name: change.event_name.and_then(|n| {
@@ -401,7 +406,17 @@ impl MarketDefinition {
                 {
                     self.event_name.clone()
                 } else {
-                    Some(SyncObj::new(Arc::from(n.into_owned())))
+                    Some(SyncObj::new(Arc::from(n.as_ref())))
+                }
+            }),
+            race_type: change.race_type.and_then(|s| {
+                if self
+                    .race_type
+                    .is_some_and(|rt| rt.as_ref() == s)
+                {
+                    self.race_type.clone()
+                } else {
+                    Some(SyncObj::new(Arc::from(s)))
                 }
             }),
             runners: change
@@ -608,8 +623,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             // let each_way_divisor = Some(map.next_value::<f64>()?);
                         }
                         Field::RaceType => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.def.source, self.def.file);
+                            upt.race_type = Some(map.next_value::<&str>()?);
                         }
                         Field::KeyLineDefiniton => {
                             map.next_value::<serde::de::IgnoredAny>()?;

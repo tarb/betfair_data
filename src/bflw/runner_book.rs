@@ -1,4 +1,5 @@
 use core::fmt;
+use std::sync::Arc;
 use pyo3::prelude::*;
 use pyo3::types::PyList;
 use serde::de::{DeserializeSeed, Error, IgnoredAny, MapAccess, Visitor};
@@ -6,7 +7,7 @@ use serde::{Deserialize, Deserializer};
 use serde_json::value::RawValue;
 
 use super::market_definition_runner::MarketDefRunnerUpdate;
-use super::runner_book_sp::{RunnerBookSP, RunnerBookSPUpdate};
+use super::runner_book_sp::{RunnerBookSP};
 use crate::bflw::float_str::FloatStr;
 use crate::bflw::RoundToCents;
 use crate::datetime::DateTimeString;
@@ -14,7 +15,7 @@ use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
 use crate::immutable::container::SyncObj;
 use crate::immutable::price_size::{ImmutablePriceSizeBackLadder, ImmutablePriceSizeLayLadder};
-use crate::immutable::runner_book_ex::{RunnerBookEX, RunnerBookEXUpdate};
+use crate::immutable::runner_book_ex::{RunnerBookEX};
 use crate::market_source::SourceConfig;
 use crate::price_size::{F64OrStr, PriceSize};
 use crate::py_rep::PyRep;
@@ -111,29 +112,29 @@ impl RunnerBook {
     }
 
     pub fn update_from_def(&self, change: &MarketDefRunnerUpdate, py: Python) -> Self {
-        let (ex, sp) = if change.bsp.is_some() {
-            // need to update sp obj with bsp value
+        // need to update sp obj with bsp value if it's changed
+        let sp = {
             let sp = self.sp.borrow(py);
             if sp.actual_sp != change.bsp {
-                let upt = RunnerBookSPUpdate {
+                Py::new(py, RunnerBookSP {
                     actual_sp: change.bsp,
-                    ..Default::default()
-                };
-                (self.ex.clone_ref(py), sp.update(upt, py))
+                    far_price: sp.far_price,
+                    near_price: sp.near_price,
+                    back_stake_taken: sp.back_stake_taken.clone(),
+                    lay_liability_taken: sp.lay_liability_taken.clone(),
+                }).unwrap()
             } else {
-                (self.ex.clone_ref(py), self.sp.clone_ref(py))
+                self.sp.clone_ref(py)
             }
-        } else {
-            (self.ex.clone_ref(py), self.sp.clone_ref(py))
         };
 
         Self {
             selection_id: self.selection_id,
             status: change.status,
-            adjustment_factor: change.adjustment_factor.or(self.adjustment_factor),
+            adjustment_factor: change.adjustment_factor, //.or(self.adjustment_factor),
             last_price_traded: self.last_price_traded,
             total_matched: self.total_matched,
-            ex,
+            ex: self.ex.clone_ref(py),
             sp,
             removal_date: change
                 .removal_date
@@ -147,8 +148,8 @@ impl RunnerBook {
                         Some(SyncObj::new(dts))
                     }
                     _ => self.removal_date.clone(),
-                })
-                .or_else(|| self.removal_date.clone()),
+                }),
+                // .or_else(|| self.removal_date.clone()),
 
             matches: self.matches.clone(), // always empty
             orders: self.orders.clone(),   // always empty
@@ -372,27 +373,41 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerBookChangeDeser<'a, 'py> {
                 }
 
                 let ex = if atb.is_some() || atl.is_some() || trd.is_some() {
-                    let upt = RunnerBookEXUpdate {
-                        available_to_back: atb,
-                        available_to_lay: atl,
-                        traded_volume: trd,
-                    };
+                    let ex = self.runner.ex.borrow(self.py);
+                    Some(Py::new(self.py,RunnerBookEX {
+                        available_to_back: atb.map_or_else(
+                            || ex.available_to_back.clone(),
+                            |ps| SyncObj::new(Arc::new(ps)),
+                        ),
+                        available_to_lay: atl.map_or_else(
+                            || ex.available_to_lay.clone(),
+                            |ps| SyncObj::new(Arc::new(ps)),
+                        ),
+                        traded_volume: trd.map_or_else(
+                            || ex.traded_volume.clone(),
+                            |ps| SyncObj::new(Arc::new(ps)),
+                        ),
+                    }).unwrap())
 
-                    Some(self.runner.ex.borrow(self.py).update(upt, self.py))
                 } else {
                     None
                 };
 
                 let sp = if spl.is_some() || spb.is_some() || spn.is_some() || spf.is_some() {
-                    let upt = RunnerBookSPUpdate {
-                        actual_sp: None,
-                        far_price: spf,
-                        near_price: spn,
-                        back_stake_taken: spb,
-                        lay_liability_taken: spl,
-                    };
-
-                    Some(self.runner.sp.borrow(self.py).update(upt, self.py))
+                    let sp = self.runner.sp.borrow(self.py);
+                    Some(Py::new(self.py, RunnerBookSP {
+                        actual_sp: sp.actual_sp,
+                        far_price: spf.or(sp.far_price),
+                        near_price: spn.or(sp.near_price),
+                        back_stake_taken: spb.map_or_else(
+                            || sp.back_stake_taken.clone(),
+                            |ps| SyncObj::new(Arc::new(ps)),
+                        ),
+                        lay_liability_taken: spl.map_or_else(
+                            || sp.lay_liability_taken.clone(),
+                            |ps| SyncObj::new(Arc::new(ps)),
+                        ),
+                    }).unwrap())
                 } else {
                     None
                 };

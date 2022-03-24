@@ -93,6 +93,10 @@ impl Market {
     fn get_market_name(&self, py: Python) -> PyObject {
         self.def.market_name.to_object(py)
     }
+    #[getter(race_type)]
+    fn get_race_type(&self, py: Python) -> PyObject {
+        self.def.race_type.to_object(py)
+    }
     #[getter(number_of_active_runners)]
     fn get_number_of_active_runners(&self, py: Python) -> PyObject {
         self.def.number_of_active_runners.into_py(py)

@@ -79,7 +79,7 @@ class MarketDefinition:
     eventName: Optional[str]
     priceLadderDefinition: None
     keyLineDefinition: None
-    raceType: None
+    raceType: Optional[str]
 
 class MarketDefinitionRunner:
     adjustment_factor: Optional[float]
