@@ -7,9 +7,11 @@ import logging
 
 logging.basicConfig(level=logging.FATAL, format='%(levelname)s %(name)s %(message)s')
 
+lightweight = False
+
 trading = betfairlightweight.APIClient("username", "password", "appkey")
 listener = betfairlightweight.StreamListener(
-    max_latency=None, lightweight=False, update_clk=False, output_queue=None, cumulative_runner_tv=True, calculate_market_tv=True
+    max_latency=None, lightweight=lightweight, update_clk=False, output_queue=None, cumulative_runner_tv=True, calculate_market_tv=True
 )
 
 paths = [ 

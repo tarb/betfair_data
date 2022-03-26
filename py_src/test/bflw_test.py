@@ -11,25 +11,25 @@ import betfairlightweight
 import betfair_data
 
 # types
-from betfair_data import bflw as bfd
+from betfair_data import bflw
 import betfairlightweight.resources.bettingresources as bflw
 import betfairlightweight.resources.streamingresources as bflws
 
 #  paths to test files
-paths = glob("data/*Racing*")
-# paths = glob("data/*OtherSports*")
+# paths = glob("data/*Racing*")
+paths = glob("data/stream/*")
 # paths = [
 #     "data/2021_12_DecRacingAUPro.tar",
 #     "data/2021_10_OctRacingAUPro.tar",
 #     "data/2021_11_NovRacingAUPro.tar",
 # ]
 
-bfd_source = betfair_data.Files(paths, cumulative_runner_tv=True).bflw()
+bfd_source = betfair_data.Files(paths, cumulative_runner_tv=False).bflw()
 
 def bflw_source(file_paths: Sequence[str]):
     trading = betfairlightweight.APIClient("username", "password", "appkey")
     listener = betfairlightweight.StreamListener(
-        max_latency=None, update_clk=False, output_queue=None, cumulative_runner_tv=True, calculate_market_tv=True
+        max_latency=None, update_clk=False, output_queue=None, cumulative_runner_tv=False, calculate_market_tv=False
     )
 
     for file_path in file_paths:
@@ -60,13 +60,7 @@ def run_test():
     updates = 0
     files = 0
     for (bfd_file, bflw_gen) in zip(bfd_source, bflw_source(paths)): 
-        files += 1
-        # known broken file
-        if bfd_file.file_name == "data/2020_01_JanOtherSportsPro.tar/PRO/2020/Jan/26/29656798/1.167745383.bz2" or \
-           bfd_file.file_name == "data/2020_01_JanOtherSportsPro.tar/PRO/2020/Jan/26/29656798/29656798.bz2" or \
-           bfd_file.file_name == "data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/4/30970662/1.188544564.bz2":
-            continue
-        
+        files += 1        
         row = 0
 
         for (bfd_mbs, bflw_mbs) in zip(bfd_file, bflw_gen()):
@@ -158,22 +152,22 @@ def test_RunnerBook(bfd_rb: bfd.RunnerBook, bflw_rb: bflw.RunnerBook, file_name:
     test_RunnerBookSP(bfd_rb.sp, bflw_rb.sp, bfd_rb.selection_id, file_name, row)
     
 def test_RunnerBookEX(bfd_ex: betfair_data.RunnerBookEX, bflw_ex: bflw.RunnerBookEX, sid: int, file_name: str, row: int):
-    test_ListPriceSize(bfd_ex.available_to_back, bflw_ex.available_to_back, f"{file_name}:{row} <RunnerBookEX[{sid}].available_to_back>", file_name, row)
-    test_ListPriceSize(bfd_ex.available_to_lay, bflw_ex.available_to_lay, f"{file_name}:{row} <RunnerBookEX[{sid}].available_to_lay>", file_name, row)
-    test_ListPriceSize(bfd_ex.traded_volume, bflw_ex.traded_volume, f"{file_name}:{row} <RunnerBookEX[{sid}].traded_volume>", file_name, row)
+    test_ListPriceSize(bfd_ex.available_to_back, bflw_ex.available_to_back, f"{file_name}:{row} <RunnerBookEX[{sid}].available_to_back>")
+    test_ListPriceSize(bfd_ex.available_to_lay, bflw_ex.available_to_lay, f"{file_name}:{row} <RunnerBookEX[{sid}].available_to_lay>")
+    test_ListPriceSize(bfd_ex.traded_volume, bflw_ex.traded_volume, f"{file_name}:{row} <RunnerBookEX[{sid}].traded_volume>")
 
 def test_RunnerBookSP(bfd_sp: betfair_data.RunnerBookSP, bflw_sp: bflw.RunnerBookSP, sid: int, file_name: str, row: int):
     assert test_float(bfd_sp.far_price, bflw_sp.far_price), f"{file_name}:{row} <RunnerBookSP> far_price {bfd_sp.far_price} != {bflw_sp.far_price}"
     assert test_float(bfd_sp.near_price, bflw_sp.near_price), f"{file_name}:{row} <RunnerBookSP> near_price {bfd_sp.near_price} != {bflw_sp.near_price}"
     assert test_float(bfd_sp.actual_sp, bflw_sp.actual_sp), f"{file_name}:{row} <RunnerBookSP> actual_sp {bfd_sp.actual_sp} != {bflw_sp.actual_sp}"
-    test_ListPriceSize(bfd_sp.back_stake_taken, bflw_sp.back_stake_taken, f"{file_name}:{row} <RunnerBookSP[{sid}].back_stake_taken>", file_name, row)
-    test_ListPriceSize(bfd_sp.lay_liability_taken, bflw_sp.lay_liability_taken, f"{file_name}:{row} <RunnerBookSP[{sid}].lay_liability_taken>", file_name, row)
+    test_ListPriceSize(bfd_sp.back_stake_taken, bflw_sp.back_stake_taken, f"{file_name}:{row} <RunnerBookSP[{sid}].back_stake_taken>")
+    test_ListPriceSize(bfd_sp.lay_liability_taken, bflw_sp.lay_liability_taken, f"{file_name}:{row} <RunnerBookSP[{sid}].lay_liability_taken>")
 
-def test_ListPriceSize(bfd_ps: List[betfair_data.PriceSize], bflw_ps: List[bflw.PriceSize], context: str, file_name: str, row: int):
-    assert len(bfd_ps) == len(bflw_ps), f"{file_name}:{row} {context} <List[PriceSize]> different lengths {print_ladder(bfd_ps)} != {print_ladder(bflw_ps)}"
+def test_ListPriceSize(bfd_ps: List[betfair_data.PriceSize], bflw_ps: List[bflw.PriceSize], context: str):
+    assert len(bfd_ps) == len(bflw_ps), f"{context} <List[PriceSize]> different lengths {print_ladder(bfd_ps)} != {print_ladder(bflw_ps)}"
     for i, (bfd, bflw) in enumerate(zip(bfd_ps, bflw_ps)):
-        assert test_float(bfd.price, bflw.price), f"{file_name}:{row} {context} <List[PriceSize][{i}]> Price  {bfd.price} != {bflw.price}"
-        assert test_float(bfd.size, bflw.size), f"{file_name}:{row} {context} <List[PriceSize][{i}]> Size  {bfd.size} != {bflw.size}"
+        assert test_float(bfd.price, bflw.price), f"{context} <List[PriceSize][{i}]> PriceError {print_ladder(bfd_ps)} != {print_ladder(bflw_ps)}"
+        assert test_float(bfd.size, bflw.size), f"{context} <List[PriceSize][{i}]> SizeError {print_ladder(bfd_ps)} != {print_ladder(bflw_ps)}"
     
 def test_float(f1: float|str|NoneType, f2: float|str|int|NoneType) -> bool:
     if isinstance(f2, int):

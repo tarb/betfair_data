@@ -64,18 +64,18 @@ struct MarketDefinitionUpdate<'a> {
     event_type_id: Option<EventTypeID>,
     in_play: Option<bool>,
     market_base_rate: Option<f32>,
-    market_time: Option<&'a str>,
+    market_time: Option<FixedSizeString<24>>,
     market_type: Option<&'a str>,
     race_type: Option<&'a str>,
     number_of_active_runners: Option<u16>,
     number_of_winners: Option<u8>,
-    open_date: Option<&'a str>,
+    open_date: Option<FixedSizeString<24>>,
     persistence_enabled: Option<bool>,
     regulators: Option<Vec<&'a str>>,
     runners_voidable: Option<bool>,
-    settled_time: Option<&'a str>,
+    settled_time: Option<FixedSizeString<24>>,
     status: Option<MarketStatus>,
-    suspend_time: Option<&'a str>,
+    suspend_time: Option<FixedSizeString<24>>,
     timezone: Option<&'a str>,
     turn_in_play_enabled: Option<bool>,
     venue: Option<&'a str>,
@@ -151,7 +151,7 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             })?,
             market_time: self
                 .market_time
-                .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
+                .map(|s| SyncObj::new(DateTimeString::try_from(s).unwrap()))
                 .ok_or(DataError {
                     missing_field: "marketTime",
                 })?,
@@ -173,16 +173,16 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .map(|s| SyncObj::new(FixedSizeString::try_from(s).unwrap())), // todo
             open_date: self
                 .open_date
-                .map(|s| SyncObj::new(DateTimeString::new(s).unwrap()))
+                .map(|s| SyncObj::new(DateTimeString::try_from(s).unwrap()))
                 .ok_or(DataError {
                     missing_field: "openDate",
                 })?,
             settled_time: self
                 .settled_time
-                .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
+                .map(|s| SyncObj::new(DateTimeString::try_from(s).unwrap())),
             suspend_time: self
                 .suspend_time
-                .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
+                .map(|s| SyncObj::new(DateTimeString::try_from(s).unwrap())),
             market_name: self.market_name.map(|s| SyncObj::new(Arc::from(s.as_ref()))),
             event_name: self
                 .event_name
@@ -251,10 +251,10 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             market_time: self
                 .market_time
                 .map(|s| {
-                    if market.market_time.as_str() == s {
+                    if **market.market_time == s {
                         market.market_time.clone()
                     } else {
-                        SyncObj::new(DateTimeString::new(s).unwrap())
+                        SyncObj::new(DateTimeString::try_from(s).unwrap())
                     }
                 })
                 .ok_or(DataError {
@@ -313,27 +313,27 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             open_date: self
                 .open_date
                 .map(|s| {
-                    if market.open_date.as_str() == s {
+                    if **market.open_date == s {
                         market.open_date.clone()
                     } else {
-                        SyncObj::new(DateTimeString::new(s).unwrap())
+                        SyncObj::new(DateTimeString::try_from(s).unwrap())
                     }
                 })
                 .ok_or(DataError {
                     missing_field: "openDate",
                 })?,
             settled_time: self.settled_time.and_then(|s| {
-                if market.settled_time.is_some_and(|st| st.as_str() == s) {
+                if market.settled_time.is_some_and(|st| s == **st) {
                     market.settled_time.clone()
                 } else {
-                    Some(SyncObj::new(DateTimeString::new(s).unwrap()))
+                    Some(SyncObj::new(DateTimeString::try_from(s).unwrap()))
                 }
             }),
             suspend_time: self.suspend_time.and_then(|s| {
-                if market.suspend_time.is_some_and(|st| st.as_str() == s) {
+                if market.suspend_time.is_some_and(|st| s == **st) {
                     market.suspend_time.clone()
                 } else {
-                    Some(SyncObj::new(DateTimeString::new(s).unwrap()))
+                    Some(SyncObj::new(DateTimeString::try_from(s).unwrap()))
                 }
             }),
             market_name: self.market_name.and_then(|n| {
@@ -536,16 +536,16 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             upt.betting_type = Some(map.next_value::<MarketBettingType>()?);
                         }
                         Field::MarketTime => {
-                            upt.market_time = Some(map.next_value::<&str>()?);
+                            upt.market_time = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::SuspendTime => {
-                            upt.suspend_time = Some(map.next_value::<&str>()?);
+                            upt.suspend_time = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::SettledTime => {
-                            upt.settled_time = Some(map.next_value::<&str>()?);
+                            upt.settled_time = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::OpenDate => {
-                            upt.open_date = Some(map.next_value::<&str>()?);
+                            upt.open_date = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::EachWayDivisor => {
                             upt.each_way_divisor = Some(map.next_value::<f64>()?);
@@ -839,7 +839,7 @@ struct RunnerDefUpdate<'a> {
     sort_priority: u16,
     name: Option<&'a str>,
     bsp: Option<F64OrStr>,
-    removal_date: Option<&'a str>,
+    removal_date: Option<FixedSizeString<24>>,
     hc: Option<f32>,
 }
 
@@ -860,7 +860,7 @@ impl<'a> RunnerDefUpdate<'a> {
             name: self.name.map(|s| SyncObj::new(Arc::from(s))),
             removal_date: self
                 .removal_date
-                .map(|s| SyncObj::new(DateTimeString::new(s).unwrap())),
+                .map(|s| SyncObj::new(DateTimeString::try_from(s).unwrap())),
             sp: Py::new(py, sp).unwrap(),
             ex: Py::new(py, RunnerBookEX::default()).unwrap(),
             total_matched: 0.0,
@@ -923,10 +923,10 @@ impl<'a> RunnerDefUpdate<'a> {
             removal_date: self
                 .removal_date
                 .and_then(|n| {
-                    if runner.removal_date.contains(&n) {
+                    if runner.removal_date.contains(&n.as_ref()) {
                         runner.removal_date.clone()
                     } else {
-                        Some(SyncObj::new(DateTimeString::new(n).unwrap()))
+                        Some(SyncObj::new(DateTimeString::try_from(n).unwrap()))
                     }
                 }),
             total_matched: runner.total_matched,
@@ -973,9 +973,9 @@ impl<'a> RunnerDefUpdate<'a> {
         if let Some(n) = self.name && !runner.name.contains(&n) {
             runner.name = Some(SyncObj::new(Arc::from(n)));
         }
-        if (self.removal_date.is_some() != runner.removal_date.is_some()) || self.removal_date.is_some_and(|s| !runner.removal_date.contains(s)) {
+        if (self.removal_date.is_some() != runner.removal_date.is_some()) || self.removal_date.is_some_and(|s| !runner.removal_date.contains(&s.as_ref())) {
             match self.removal_date {
-                Some(s) => { runner.removal_date = Some(SyncObj::new(DateTimeString::new(s).unwrap())); },
+                Some(s) => { runner.removal_date = Some(SyncObj::new(DateTimeString::try_from(s).unwrap())); },
                 None => { runner.removal_date = None; }
             }
         }

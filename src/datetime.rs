@@ -36,6 +36,19 @@ impl DateTimeString {
             ts: ts.timestamp_millis(),
         })
     }
+
+    pub fn as_fs_str(&self) -> FixedSizeString<24> {
+        self.str
+    }
+}
+
+impl TryFrom<FixedSizeString<24>> for DateTimeString {
+    type Error = chrono::ParseError;
+
+    fn try_from(str: FixedSizeString<24>) -> Result<Self, Self::Error> {
+        let ts = chrono::DateTime::parse_from_rfc3339(&str)?.timestamp_millis();
+        Ok(Self { str, ts })
+    }
 }
 
 impl PyRep for DateTimeString {
@@ -76,6 +89,12 @@ impl PartialEq<str> for DateTimeString {
 impl PartialEq<DateTimeString> for &str {
     fn eq(&self, s: &DateTimeString) -> bool {
         self == &s.str
+    }
+}
+
+impl PartialEq<DateTimeString> for FixedSizeString<24> {
+    fn eq(&self, s: &DateTimeString) -> bool {
+        *self == s.str
     }
 }
 

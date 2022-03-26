@@ -8,10 +8,10 @@ use crate::config::Config;
 use crate::datetime::DateTimeString;
 use crate::enums::SelectionStatus;
 use crate::ids::SelectionID;
-use crate::immutable::container::SyncObj;
 use crate::mutable::price_size::{PriceSizeBackLadder, PriceSizeLayLadder};
 use crate::price_size::F64OrStr;
-use crate::strings::StringSetExtNeq;
+use crate::py_rep::PyRep;
+use crate::strings::{FixedSizeString, StringSetExtNeq};
 
 use super::runner_book_ex::RunnerBookEXMut;
 use super::runner_book_sp::RunnerBookSPMut;
@@ -22,7 +22,7 @@ pub struct Runner {
     #[pyo3(get)]
     pub status: SelectionStatus,
     #[pyo3(get)]
-    pub name: String,
+    pub name: Option<String>,
     #[pyo3(get)]
     pub last_price_traded: Option<f64>,
     #[pyo3(get)]
@@ -35,8 +35,7 @@ pub struct Runner {
     pub sp: Py<RunnerBookSPMut>,
     #[pyo3(get)]
     pub sort_priority: u16,
-    #[pyo3(get)]
-    pub removal_date: Option<SyncObj<DateTimeString>>,
+    pub removal_date: Option<DateTimeString>,
 }
 
 impl Runner {
@@ -70,7 +69,7 @@ impl Runner {
             total_matched: self.total_matched,
             adjustment_factor: self.adjustment_factor,
             sort_priority: self.sort_priority,
-            removal_date: self.removal_date.clone(),
+            removal_date: self.removal_date,
             ex: Py::new(py, ex).unwrap(),
             sp: Py::new(py, sp).unwrap(),
         }
@@ -95,220 +94,9 @@ impl Runner {
     fn get_handicap(&self) -> Option<f32> {
         self.selection_id.handicap()
     }
-}
-
-pub struct RunnerDefSeqDeser<'a, 'py> {
-    pub runners: &'a mut Vec<Py<Runner>>,
-    pub config: Config,
-    pub py: Python<'py>,
-}
-impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeqDeser<'a, 'py> {
-    type Value = ();
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct RunnerSeqVisitor<'a, 'py> {
-            runners: &'a mut Vec<Py<Runner>>,
-            config: Config,
-            py: Python<'py>,
-        }
-        impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
-            type Value = ();
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("")
-            }
-
-            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-            where
-                A: serde::de::SeqAccess<'de>,
-            {
-                // WARNING
-                // So this grossness, is due to us needing to get the selection_id to find the
-                // runner to deserialize in place into. The id is not the first element of the
-                // object, so we'd need to defer parsing the other properties, then come back
-                // to them once we know the correct selection to use as the seed.
-                // What we do here is parse the json twice, once pulling out only the id, then
-                // again as normal
-                #[derive(Deserialize)]
-                struct RunnerWithID {
-                    id: u32,
-                    hc: Option<f32>,
-                }
-
-                let mut i = 0;
-
-                while let Some(raw) = seq.next_element::<&RawValue>()? {
-                    let mut deser = serde_json::Deserializer::from_str(raw.get());
-                    let parts: RunnerWithID =
-                        serde_json::from_str(raw.get()).map_err(Error::custom)?;
-                    let rid = SelectionID::from((parts.id, parts.hc));
-
-                    let index = self
-                        .runners
-                        .iter()
-                        .map(|r| r.borrow_mut(self.py))
-                        .position(|r| r.selection_id == rid);
-
-                    match index {
-                        Some(mut index) => {
-                            if index != i {
-                                self.runners.swap(index, i);
-                                index = i;
-                            }
-
-                            let mut runner =
-                                unsafe { self.runners.get_unchecked(index).borrow_mut(self.py) };
-
-                            RunnerDefinitonDeser {
-                                runner: &mut runner,
-                                config: self.config,
-                                py: self.py,
-                            }
-                            .deserialize(&mut deser)
-                            .map_err(Error::custom)?
-                        }
-                        None => {
-                            let mut runner = Runner::new(self.py);
-                            runner.selection_id = rid;
-                            RunnerDefinitonDeser {
-                                runner: &mut runner,
-                                config: self.config,
-                                py: self.py,
-                            }
-                            .deserialize(&mut deser)
-                            .map_err(Error::custom)?;
-
-                            self.runners.push(Py::new(self.py, runner).unwrap());
-                            let index = self.runners.len() - 1;
-                            self.runners.swap(i, index);
-                        }
-                    }
-
-                    i += 1;
-                }
-
-                // remove any runners not found in the runners def,
-                // theses will have been swapped to the end of the array
-                self.runners.truncate(i);
-
-                Ok(())
-            }
-        }
-
-        deserializer.deserialize_seq(RunnerSeqVisitor {
-            runners: self.runners,
-            config: self.config,
-            py: self.py,
-        })
-    }
-}
-
-struct RunnerDefinitonDeser<'a, 'py> {
-    runner: &'a mut Runner,
-    config: Config,
-    py: Python<'py>,
-}
-impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefinitonDeser<'a, 'py> {
-    type Value = ();
-
-    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        #[derive(Debug, Deserialize)]
-        #[serde(field_identifier, rename_all = "camelCase")]
-        enum Field {
-            AdjustmentFactor,
-            Status,
-            SortPriority,
-            Id,
-            Name,
-            Bsp,
-            RemovalDate,
-            Hc,
-        }
-
-        struct RunnerDefVisitor<'a, 'py> {
-            runner: &'a mut Runner,
-            _config: Config,
-            py: Python<'py>,
-        }
-        impl<'de, 'a, 'py> Visitor<'de> for RunnerDefVisitor<'a, 'py> {
-            type Value = ();
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("")
-            }
-
-            fn visit_map<V>(mut self, mut map: V) -> Result<Self::Value, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::AdjustmentFactor => {
-                            self.runner.adjustment_factor =
-                                Some(map.next_value::<F64OrStr>()?.into())
-                        }
-                        Field::Status => {
-                            self.runner.status = map.next_value()?;
-
-                            if self.runner.status == SelectionStatus::Removed
-                                || self.runner.status == SelectionStatus::RemovedVacant
-                            {
-                                self.runner.ex.borrow_mut(self.py).clear();
-                                // self.runner.sp.borrow_mut(self.py).clear();
-                            }
-                        }
-                        Field::SortPriority => self.runner.sort_priority = map.next_value()?,
-                        Field::Name => {
-                            self.runner.name.set_if_ne(map.next_value::<Cow<str>>()?);
-                        }
-                        Field::RemovalDate => {
-                            let s = map.next_value::<&str>()?;
-                            if !self.runner.removal_date.contains(&s) {
-                                let dt = DateTimeString::new(s).map_err(Error::custom)?;
-                                self.runner.removal_date = Some(SyncObj::new(dt));
-                            }
-                        }
-                        Field::Bsp => {
-                            let mut sp = self.runner.sp.borrow_mut(self.py);
-                            sp.actual_sp = Some(map.next_value::<F64OrStr>()?.into());
-                        }
-                        Field::Id => {
-                            map.next_value::<IgnoredAny>()?;
-                        }
-                        Field::Hc => {
-                            map.next_value::<IgnoredAny>()?;
-                        }
-                    }
-                }
-
-                Ok(())
-            }
-        }
-
-        const FIELDS: &[&str] = &[
-            "adjustmentFactor",
-            "status",
-            "sortPriority",
-            "id",
-            "name",
-            "bsp",
-            "removalDate",
-        ];
-        deserializer.deserialize_struct(
-            "RunnerDef",
-            FIELDS,
-            RunnerDefVisitor {
-                runner: self.runner,
-                _config: self.config,
-                py: self.py,
-            },
-        )
+    #[getter(removal_date)]
+    fn get_removeal_date(&self, py: Python) -> PyObject {
+        self.removal_date.py_rep(py)
     }
 }
 
@@ -531,5 +319,149 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerChangeDeser<'a, 'py> {
                 py: self.py,
             },
         )
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RunnerDefUpdate<'a> {
+    id: u32,
+    adjustment_factor: Option<f64>,
+    status: SelectionStatus,
+    sort_priority: u16,
+    name: Option<Cow<'a, str>>,
+    bsp: Option<F64OrStr>,
+    removal_date: Option<FixedSizeString<24>>,
+    hc: Option<f32>,
+}
+
+impl<'a> RunnerDefUpdate<'a> {
+    fn create(self, py: Python) -> Runner {
+        let sp = RunnerBookSPMut {
+            actual_sp: self.bsp.map(|f| *f),
+            ..Default::default()
+        };
+
+        let sid = SelectionID::from((self.id, self.hc));
+
+        Runner {
+            selection_id: sid,
+            status: self.status,
+            adjustment_factor: self.adjustment_factor,
+            sort_priority: self.sort_priority,
+            name: self.name.map(|s| s.into_owned()),
+            removal_date: self
+                .removal_date
+                .map(|s| DateTimeString::try_from(s).unwrap()),
+            sp: Py::new(py, sp).unwrap(),
+            ex: Py::new(py, RunnerBookEXMut::default()).unwrap(),
+            total_matched: 0.0,
+            last_price_traded: None,
+        }
+    }
+
+    fn update(self, mut runner: PyRefMut<Runner>, py: Python) {
+        runner.sp.borrow_mut(py).actual_sp = self.bsp.map(|f| *f);
+        runner.adjustment_factor = self.adjustment_factor;
+        runner.status = self.status;
+        runner.sort_priority = self.sort_priority;
+
+        match self.name {
+            Some(s) => {
+                runner.name.set_if_ne(s);
+            }
+            None => {
+                runner.name = None;
+            }
+        }
+
+        match self.removal_date {
+            Some(s) if !runner.removal_date.contains(&s) => {
+                runner.removal_date = Some(DateTimeString::try_from(s).unwrap());
+            }
+            None => {
+                runner.removal_date = None;
+            }
+            _ => {}
+        }
+    }
+}
+
+pub struct RunnerDefSeqDeser<'a, 'py> {
+    pub runners: &'a mut Vec<Py<Runner>>,
+    pub config: Config,
+    pub py: Python<'py>,
+}
+impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeqDeser<'a, 'py> {
+    type Value = ();
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct RunnerSeqVisitor<'a, 'py> {
+            runners: &'a mut Vec<Py<Runner>>,
+            _config: Config,
+            py: Python<'py>,
+        }
+        impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
+            type Value = ();
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut i = 0;
+
+                while let Some(upt) = seq.next_element::<RunnerDefUpdate>()? {
+                    let rid = SelectionID::from((upt.id, upt.hc));
+
+                    let index = self
+                        .runners
+                        .iter()
+                        .map(|r| r.borrow_mut(self.py))
+                        .position(|r| r.selection_id == rid);
+
+                    match index {
+                        Some(mut index) => {
+                            if index != i {
+                                self.runners.swap(index, i);
+                                index = i;
+                            }
+
+                            let runner =
+                                unsafe { self.runners.get_unchecked(index).borrow_mut(self.py) };
+
+                            upt.update(runner, self.py);
+                        }
+                        None => {
+                            let runner = upt.create(self.py);
+
+                            self.runners.push(Py::new(self.py, runner).unwrap());
+                            let index = self.runners.len() - 1;
+                            self.runners.swap(i, index);
+                        }
+                    }
+
+                    i += 1;
+                }
+
+                // remove any runners not found in the runners def,
+                // theses will have been swapped to the end of the array
+                self.runners.truncate(i);
+
+                Ok(())
+            }
+        }
+
+        deserializer.deserialize_seq(RunnerSeqVisitor {
+            runners: self.runners,
+            _config: self.config,
+            py: self.py,
+        })
     }
 }

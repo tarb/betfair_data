@@ -61,17 +61,17 @@ struct MarketDefinitionUpdate<'a> {
     event_type_id: Option<EventTypeID>,
     in_play: Option<bool>,
     market_base_rate: Option<f32>,
-    market_time: Option<&'a str>,
+    market_time: Option<FixedSizeString<24>>,
     market_type: Option<&'a str>,
     number_of_active_runners: Option<u16>,
     number_of_winners: Option<u8>,
-    open_date: Option<&'a str>,
+    open_date: Option<FixedSizeString<24>>,
     persistence_enabled: Option<bool>,
     regulators: Option<Vec<&'a str>>,
     runners_voidable: Option<bool>,
-    settled_time: Option<&'a str>,
+    settled_time: Option<FixedSizeString<24>>,
     status: Option<MarketStatus>,
-    suspend_time: Option<&'a str>,
+    suspend_time: Option<FixedSizeString<24>>,
     timezone: Option<&'a str>,
     turn_in_play_enabled: Option<bool>,
     venue: Option<&'a str>,
@@ -148,7 +148,7 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             })?,
             market_time: self
                 .market_time
-                .map(|s| DateTimeString::new(s).unwrap())
+                .map(|s| DateTimeString::try_from(s).unwrap())
                 .ok_or(DataError {
                     missing_field: "marketTime",
                 })?,
@@ -164,12 +164,12 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
                 .map(|s| FixedSizeString::try_from(s).unwrap()), // too
             open_date: self
                 .open_date
-                .map(|s| DateTimeString::new(s).unwrap())
+                .map(|s| DateTimeString::try_from(s).unwrap())
                 .ok_or(DataError {
                     missing_field: "openDate",
                 })?,
-            settled_time: self.settled_time.map(|s| DateTimeString::new(s).unwrap()),
-            suspend_time: self.suspend_time.map(|s| DateTimeString::new(s).unwrap()),
+            settled_time: self.settled_time.map(|s| DateTimeString::try_from(s).unwrap()),
+            suspend_time: self.suspend_time.map(|s| DateTimeString::try_from(s).unwrap()),
             market_name: self.market_name.map(|s| s.into_owned()),
             event_name: self.event_name.map(|s| s.into_owned()),
             race_type: self.race_type.map(|s| s.to_string()),
@@ -244,7 +244,7 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             .market_time
             .map(|s| {
                 if market.market_time.as_str() != s {
-                    DateTimeString::new(s).unwrap()
+                    DateTimeString::try_from(s).unwrap()
                 } else {
                     market.market_time
                 }
@@ -257,7 +257,7 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             .open_date
             .map(|s| {
                 if market.open_date.as_str() != s {
-                    DateTimeString::new(s).unwrap()
+                    DateTimeString::try_from(s).unwrap()
                 } else {
                     market.open_date
                 }
@@ -279,20 +279,16 @@ impl<'a, 'b> MarketDefinitionUpdate<'a> {
             .country_code
             .map(|cc| FixedSizeString::try_from(cc).unwrap());
 
-        market.settled_time = self.settled_time.and_then(|s| {
-            if market.settled_time.is_some_and(|dts| dts != s) {
-                Some(DateTimeString::new(s).unwrap())
-            } else {
-                market.settled_time
-            }
+        market.settled_time = self.settled_time.and_then(|s| match market.settled_time {
+            Some(dts) if s != dts => Some(DateTimeString::try_from(s).unwrap()),
+            None => Some(DateTimeString::try_from(s).unwrap()),
+            _ => market.settled_time,
         });
 
-        market.suspend_time = self.suspend_time.and_then(|s| {
-            if market.suspend_time.is_some_and(|dts| dts != s) {
-                Some(DateTimeString::new(s).unwrap())
-            } else {
-                market.suspend_time
-            }
+        market.suspend_time = self.suspend_time.and_then(|s| match market.suspend_time {
+            Some(dts) if s != dts => Some(DateTimeString::try_from(s).unwrap()),
+            None => Some(DateTimeString::try_from(s).unwrap()),
+            _ => market.suspend_time,
         });
 
         market.each_way_divisor = self.each_way_divisor;
@@ -488,16 +484,16 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                             upt.betting_type = Some(map.next_value::<MarketBettingType>()?);
                         }
                         Field::MarketTime => {
-                            upt.market_time = Some(map.next_value::<&str>()?);
+                            upt.market_time = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::SuspendTime => {
-                            upt.suspend_time = Some(map.next_value::<&str>()?);
+                            upt.suspend_time = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::SettledTime => {
-                            upt.settled_time = Some(map.next_value::<&str>()?);
+                            upt.settled_time = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::OpenDate => {
-                            upt.open_date = Some(map.next_value::<&str>()?);
+                            upt.open_date = Some(map.next_value::<FixedSizeString<24>>()?);
                         }
                         Field::EachWayDivisor => {
                             upt.each_way_divisor = Some(map.next_value::<f64>()?);

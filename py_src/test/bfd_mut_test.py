@@ -23,7 +23,7 @@ def start_test():
     update_count = 0
     
     for (mut_file, imm_file) in zip(mut, imm):
-        market_count += 1
+        market_count += 1 
 
         for (m, i) in zip(mut_file, imm_file):
             assert m.market_id == i.market_id, f"<Market> market_id {m.market_id} != {i.market_id}"

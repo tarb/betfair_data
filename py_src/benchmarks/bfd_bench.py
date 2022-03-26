@@ -13,7 +13,6 @@ paths = [
     "data/2021_12_DecRacingAUPro.tar",
 ]
 
-
 def run_with_py_loading():
     market_count = 0
     update_count = 0

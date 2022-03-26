@@ -2,7 +2,6 @@ use core::fmt;
 use std::{array::TryFromSliceError, str};
 
 use serde::{de::Error, de::Visitor, Deserialize, Deserializer};
-// use staticvec::StaticString;
 
 pub trait StringSetExtNeq {
     fn set_if_ne<S: Into<String> + AsRef<str>>(&mut self, s: S) -> bool;
@@ -138,4 +137,3 @@ impl<'de, const N: usize> Deserialize<'de> for FixedSizeString<N> {
             .map_err(Error::custom)
     }
 }
-

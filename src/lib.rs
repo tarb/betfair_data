@@ -56,6 +56,7 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
     m.add_class::<Files>()?;
+    
     m.add_class::<File>()?;
     m.add_class::<PriceSize>()?;
     m.add_class::<Market>()?;
@@ -69,7 +70,6 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     bflw.add_class::<MarketDefinitionRunner>()?;
     bflw.add_class::<MarketDefinition>()?;
     bflw.add_class::<RunnerBook>()?;
-
     m.add_submodule(bflw)?;
 
     Ok(())

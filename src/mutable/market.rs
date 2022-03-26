@@ -86,7 +86,10 @@ impl MarketMut {
     }
     #[getter(country_code)]
     fn get_country_code(&self, py: Python) -> PyObject {
-        self.def.country_code.map(|cc| cc.py_rep(py)).unwrap_or_else(|| py.None())
+        self.def
+            .country_code
+            .map(|cc| cc.py_rep(py))
+            .unwrap_or_else(|| py.None())
     }
     #[getter(event_id)]
     fn get_event_id(&self) -> u32 {
@@ -351,11 +354,15 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeqDeser<'a, 'py> {
                             .position(|m| (*m).borrow(self.py).market_id.as_str() == idimg.id);
 
                         match i {
-                            Some(i) if !idimg.img.contains(&true) => {
-                                (next_books.get(i).map(|m| m.clone_ref(self.py)), Some(i))
+                            Some(i) => {
+                                let market = next_books.get(i).unwrap();
+                                if idimg.img.contains(&true) {
+                                    market.borrow_mut(self.py).clear(self.py);
+                                }
+
+                                (Some(market.clone_ref(self.py)), Some(i))
                             }
-                            Some(i) if idimg.img.contains(&true) => (None, Some(i)),
-                            _ => {
+                            None => {
                                 let m = self
                                     .markets
                                     .iter()
@@ -363,7 +370,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMcSeqDeser<'a, 'py> {
                                     .map(|o| o.clone_ref(self.py));
 
                                 if idimg.img.contains(&true) && let Some(market) = &m {
-                                    market.borrow(self.py).clear(self.py);
+                                    market.borrow_mut(self.py).clear(self.py);
                                 }
 
                                 (m, None)
@@ -476,8 +483,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
                                 }
                                 Field::Tv => {
                                     if !self.config.cumulative_runner_tv {
-                                        m.total_matched +=
-                                            map.next_value::<f64>()?;
+                                        m.total_matched += map.next_value::<f64>()?;
                                     } else {
                                         map.next_value::<IgnoredAny>()?;
                                     }
@@ -556,27 +562,4 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for PyMarketMc<'py> {
             },
         )
     }
-}
-
-#[cfg(test)]
-mod tests {
-
-    // test disabled awaiting merge which fixes cargo test
-    // https://github.com/PyO3/pyo3/pull/2135
-    /*
-    use super::*;
-
-    #[test]
-    fn test_multiple_markets() {
-        let mut m = MarketMut::new("".to_owned(), "".to_owned());
-        let py = unsafe { Python::assume_gil_acquired() };
-
-        let config = Config{cumulative_runner_tv: true, stable_runner_index: false};
-
-        let mut deser = serde_json::Deserializer::from_str(r#"{"id": "1.123456789"}{"id":"1.987654321"}"#);
-
-        PyMarketMc(&mut m, py, config).deserialize(&mut deser).expect("1st market_id deser ok");
-        PyMarketMc(&mut m, py, config).deserialize(&mut deser).expect_err("2nd market_id deser error");
-    }
-    */
 }
