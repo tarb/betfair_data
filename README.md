@@ -10,7 +10,6 @@ pip install betfair_data
 
 Note: requires Python >= 3.7.
 
-
 ## Example
 
 ```python
@@ -89,7 +88,7 @@ IDE's should automatically detect the types and provide checking and auto comple
 
 
 ## Betfairlightweight
-We also support a format that is a drop in replacement for ```betfairlightweight``` objects. We have rigorously tested it against betfairlightweight to ensure a complete match of its structure, any differences should be submitted as issues with the corrosponding differences and the data used to create them.
+We also support a format that is a drop in replacement for ```betfairlightweight``` objects. We have rigorously tested it against betfairlightweight to ensure a complete match of its structure, any differences should be submitted as issues with the corresponding differences and the data used to create them.
 ```py
 files = betfair_data.Files(paths).bflw()
 ```
