@@ -1,9 +1,7 @@
 import logging
-from typing import List, Tuple
-
-from itertools import zip_longest
 import functools
-
+from typing import List, Tuple
+from itertools import zip_longest
 from betfair_data import PriceSize
 from betfair_data import bflw
 import betfair_data
