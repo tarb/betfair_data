@@ -15,12 +15,14 @@ class MarketBook:
     cross_matching: bool
     inplay: bool
     is_market_data_delayed: bool
+    key_line_description: Optional[MarketDefinitionKeyLine]
     last_match_time: datetime
     market_definition: MarketDefinition
     market_id: str
     number_of_active_runners: int
     number_of_runners: int
     number_of_winners: int
+    price_ladder_definition: Optional[PriceLadderDescription]
     publish_time_epoch: int
     publish_time: datetime
     runners_voidable: bool

@@ -5,7 +5,7 @@ use serde_json::value::RawValue;
 use std::fmt;
 use std::sync::Arc;
 
-use super::market_definition::MarketDefinition;
+use super::market_definition::{MarketDefinition, MarketDefinitionKeyLine, PriceLadderDescription};
 use super::runner_book::RunnerBook;
 use crate::bflw::market_definition::MarketDefinitionDeser;
 use crate::bflw::runner_book::RunnerChangeSeq;
@@ -72,6 +72,24 @@ impl MarketBook {
     fn get_publish_time_epoch(&self, py: Python) -> PyObject {
         let ts = *self.publish_time;
         ts.into_py(py)
+    }
+
+    #[getter(key_line_description)]
+    fn get_key_line_description(&self, py: Python) -> Option<Py<MarketDefinitionKeyLine>> {
+        self.market_definition
+            .borrow(py)
+            .key_line_definitions
+            .as_ref()
+            .map(|p| p.clone_ref(py))
+    }
+
+    #[getter(price_ladder_definition)]
+    fn get_price_ladder_definition(&self, py: Python) -> Option<Py<PriceLadderDescription>> {
+        self.market_definition
+            .borrow(py)
+            .price_ladder_definition
+            .as_ref()
+            .map(|p| p.clone_ref(py))
     }
 }
 
