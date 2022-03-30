@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Iterator, Optional, Sequence, str
+from typing import Iterator, Optional, Sequence, List, str
 import betfair_data
 
 class BflwAdapter(Iterator[File]): ...
@@ -15,27 +15,27 @@ class MarketBook:
     cross_matching: bool
     inplay: bool
     is_market_data_delayed: bool
-    last_match_time: datetime.datetime
+    last_match_time: datetime
+    market_definition: MarketDefinition
     market_id: str
     number_of_active_runners: int
     number_of_runners: int
     number_of_winners: int
-    publish_time: datetime.datetime
     publish_time_epoch: int
-    runners: list[RunnerBook]
+    publish_time: datetime
     runners_voidable: bool
+    runners: List[RunnerBook]
     status: str
     total_available: float
     total_matched: float
     version: int
-    market_definition: MarketDefinition
 
 class RunnerBook:
     adjustment_factor: float
     ex: betfair_data.RunnerBookEX
     handicap: float
     last_price_traded: float
-    removal_date: datetime.datetime
+    removal_date: datetime
     selection_id: int
     sp: betfair_data.RunnerBookSP
     status: str
@@ -53,40 +53,50 @@ class MarketDefinition:
     cross_matching: bool
     discount_allowed: bool
     event_id: str
+    event_name: Optional[str]
     event_type_id: str
     in_play: bool
+    key_line_definitions: Optional[MarketDefinitionKeyLine]
+    line_interval: Optional[float]
+    line_max_unit: Optional[float]
+    line_min_unit: Optional[float]
     market_base_rate: float
-    market_time: datetime.datetime
+    market_time: datetime
     market_type: str
+    name: Optional[str]
     number_of_active_runners: int
     number_of_winners: int
-    open_date: datetime.datetime
+    open_date: datetime
     persistence_enabled: bool
+    price_ladder_definition: Optional[PriceLadderDescription]
+    race_type: Optional[str]
     regulators: str
-    runners: list[MarketDefinitionRunner]
     runners_voidable: bool
-    settled_time: Optional[datetime.datetime]
+    runners: List[MarketDefinitionRunner]
+    settled_time: Optional[datetime]
     status: str
-    suspend_time: Optional[datetime.datetime]
+    suspend_time: Optional[datetime]
     timezone: str
     turn_in_play_enabled: bool
     venue: Optional[str]
     version: int
-    lineMaxUnit: Optional[float]
-    lineMinUnit: Optional[float]
-    lineInterval: Optional[float]
-    name: Optional[str]
-    eventName: Optional[str]
-    priceLadderDefinition: None
-    keyLineDefinition: None
-    raceType: Optional[str]
 
 class MarketDefinitionRunner:
     adjustment_factor: Optional[float]
-    selection_id: int
-    removal_date: Optional[datetime.datetime]
-    sort_priority: int
-    status: str
     bsp: Optional[float]
     handicap: float
     name: Optional[str]
+    removal_date: Optional[datetime]
+    selection_id: int
+    sort_priority: int
+    status: str
+
+class PriceLadderDescription:
+    type: str
+
+class MarketDefinitionKeyLine:
+    key_line: List[MarketDefinitionKeyLineSelection]
+
+class MarketDefinitionKeyLineSelection:
+    handicap: float
+    selection_id: int

@@ -152,6 +152,20 @@ pub enum PriceLadderDefinition {
     LineRange,
 }
 
+static PRICE_LINE_DEF_INTERNED: SyncOnceCell<[PyObject; std::mem::variant_count::<PriceLadderDefinition>()]> = SyncOnceCell::new();
+impl IntoPy<PyObject> for PriceLadderDefinition {
+    fn into_py(self, py: Python<'_>) -> PyObject {
+        PRICE_LINE_DEF_INTERNED.get_or_init(|| {
+            [
+                PyUnicode::new(py, PriceLadderDefinition::Classic.as_ref()).into_py(py),
+                PyUnicode::new(py, PriceLadderDefinition::Finest.as_ref()).into_py(py),
+                PyUnicode::new(py, PriceLadderDefinition::LineRange.as_ref()).into_py(py),
+            ]
+        })
+        [self as usize].clone_ref(py)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

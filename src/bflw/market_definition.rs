@@ -9,7 +9,7 @@ use super::market_definition_runner::MarketDefinitionRunner;
 use super::runner_book::RunnerBook;
 use crate::bflw::market_definition_runner::RunnerDefSeq;
 use crate::datetime::DateTimeString;
-use crate::enums::{MarketBettingType, MarketStatus};
+use crate::enums::{MarketBettingType, MarketStatus, PriceLadderDefinition};
 use crate::errors::DataError;
 use crate::ids::{EventID, EventTypeID};
 use crate::immutable::container::SyncObj;
@@ -77,16 +77,22 @@ pub struct MarketDefinition {
     pub event_name: Option<SyncObj<Arc<str>>>,
     #[pyo3(get)]
     pub race_type: Option<SyncObj<Arc<str>>>,
+    #[pyo3(get)]
+    pub each_way_divisor: Option<f64>,
+    #[pyo3(get)]
+    pub line_max_unit: Option<f64>,
+    #[pyo3(get)]
+    pub line_min_unit: Option<f64>,
+    #[pyo3(get)]
+    pub line_interval: Option<f64>,
+    #[pyo3(get)]
+    pub price_ladder_definition: Option<Py<PriceLadderDescription>>,
+    #[pyo3(get)]
+    pub key_line_definitions: Option<Py<MarketDefinitionKeyLine>>,
 
     // use getters to turn these into strings
     pub event_id: EventID,
     pub event_type_id: EventTypeID,
-    // lineMaxUnit: float = None,
-    // lineMinUnit: float = None,
-    // lineInterval: float = None,
-    // priceLadderDefinition: dict = None,
-    // keyLineDefinition: dict = None,
-    // raceType: str = None,
 }
 
 #[pymethods]
@@ -99,6 +105,50 @@ impl MarketDefinition {
     #[getter(event_type_id)]
     fn get_event_type_id(&self, py: Python) -> PyObject {
         self.event_type_id.to_string().into_py(py)
+    }
+}
+
+#[derive(Debug)]
+#[pyclass]
+pub struct PriceLadderDescription {
+    #[pyo3(get)]
+    r#type: PriceLadderDefinition,
+}
+
+impl PriceLadderDescription {
+    fn new(p: PriceLadderDefinition) -> Self {
+        Self { r#type: p }
+    }
+}
+
+#[derive(Clone)]
+#[pyclass]
+pub struct MarketDefinitionKeyLine {
+    #[pyo3(get)]
+    key_line: Vec<MarketDefinitionKeyLineSelection>,
+}
+
+impl MarketDefinitionKeyLine {
+    fn new(key_line: Vec<MarketDefinitionKeyLineSelection>) -> Self {
+        Self { key_line }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[pyclass]
+pub struct MarketDefinitionKeyLineSelection {
+    #[pyo3(get)]
+    selection_id: u32,
+    #[pyo3(get)]
+    handicap: f32,
+}
+
+impl MarketDefinitionKeyLineSelection {
+    fn new(selection_id: u32, handicap: f32) -> Self {
+        Self {
+            selection_id,
+            handicap,
+        }
     }
 }
 
@@ -135,10 +185,16 @@ struct MarketDefinitionUpdate<'a> {
     country_code: Option<&'a str>,
     name: Option<Cow<'a, str>>,
     event_name: Option<Cow<'a, str>>,
+    each_way_divisor: Option<f64>,
+    line_max_unit: Option<f64>,
+    line_min_unit: Option<f64>,
+    line_interval: Option<f64>,
+    price_ladder_definition: Option<PriceLadderDefinition>,
+    key_line_definitions: Option<Vec<MarketDefinitionKeyLineSelection>>,
 }
 
 impl MarketDefinition {
-    fn new(change: MarketDefinitionUpdate) -> Result<Self, DataError> {
+    fn new(change: MarketDefinitionUpdate, py: Python) -> Result<Self, DataError> {
         Ok(Self {
             bet_delay: change.bet_delay.ok_or(DataError {
                 missing_field: "betDelay",
@@ -245,10 +301,24 @@ impl MarketDefinition {
             event_name: change
                 .event_name
                 .map(|s| SyncObj::new(Arc::from(s.as_ref()))),
+            each_way_divisor: change.each_way_divisor,
+            line_min_unit: change.line_min_unit,
+            line_max_unit: change.line_max_unit,
+            line_interval: change.line_interval,
+            price_ladder_definition: change
+                .price_ladder_definition
+                .map(|p| Py::new(py, PriceLadderDescription::new(p)).unwrap()),
+            key_line_definitions: change
+                .key_line_definitions
+                .map(|kls| Py::new(py, MarketDefinitionKeyLine::new(kls)).unwrap()),
         })
     }
 
-    fn update_from_change(&self, change: MarketDefinitionUpdate) -> Result<Self, DataError> {
+    fn update_from_change(
+        &self,
+        change: MarketDefinitionUpdate,
+        py: Python,
+    ) -> Result<Self, DataError> {
         Ok(Self {
             bet_delay: change.bet_delay.ok_or(DataError {
                 missing_field: "betDelay",
@@ -410,10 +480,7 @@ impl MarketDefinition {
                 }
             }),
             race_type: change.race_type.and_then(|s| {
-                if self
-                    .race_type
-                    .is_some_and(|rt| rt.as_ref() == s)
-                {
+                if self.race_type.is_some_and(|rt| rt.as_ref() == s) {
                     self.race_type.clone()
                 } else {
                     Some(SyncObj::new(Arc::from(s)))
@@ -423,6 +490,16 @@ impl MarketDefinition {
                 .runners
                 .map(|r| SyncObj::new(Arc::new(r)))
                 .unwrap_or_else(|| self.runners.clone()),
+            each_way_divisor: change.each_way_divisor,
+            line_min_unit: change.line_min_unit,
+            line_max_unit: change.line_max_unit,
+            line_interval: change.line_interval,
+            price_ladder_definition: change
+                .price_ladder_definition
+                .map(|p| Py::new(py, PriceLadderDescription::new(p)).unwrap()),
+            key_line_definitions: change
+                .key_line_definitions
+                .map(|kls| Py::new(py, MarketDefinitionKeyLine::new(kls)).unwrap()),
         })
     }
 }
@@ -619,38 +696,53 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
                         }
                         // after searching over 200k markets, I cant find these values in any data sets :/
                         Field::EachWayDivisor => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // let each_way_divisor = Some(map.next_value::<f64>()?);
+                            upt.each_way_divisor = Some(map.next_value::<f64>()?);
                         }
                         Field::RaceType => {
                             upt.race_type = Some(map.next_value::<&str>()?);
                         }
                         Field::KeyLineDefiniton => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.def.source, self.def.file);
+                            #[derive(Deserialize)]
+                            struct Kld {
+                                kl: Vec<Klds>,
+                            }
+                            #[derive(Deserialize)]
+                            struct Klds {
+                                id: u32,
+                                hc: f32,
+                            }
+
+                            let kld = map.next_value::<Kld>()?;
+                            upt.key_line_definitions = Some(
+                                kld.kl
+                                    .iter()
+                                    .map(|k| MarketDefinitionKeyLineSelection::new(k.id, k.hc))
+                                    .collect(),
+                            );
                         }
                         Field::PriceLadderDefinition => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.def.source, self.def.file);
+                            #[derive(Deserialize)]
+                            struct Pld {
+                                r#type: PriceLadderDefinition,
+                            }
+                            let pld = map.next_value::<Pld>()?;
+                            upt.price_ladder_definition = Some(pld.r#type);
                         }
                         Field::LineMaxUnit => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.def.source, self.def.file);
+                            upt.line_max_unit = Some(map.next_value::<f64>()?);
                         }
                         Field::LineMinUnit => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.def.source, self.def.file);
+                            upt.line_min_unit = Some(map.next_value::<f64>()?);
                         }
                         Field::LineInterval => {
-                            map.next_value::<serde::de::IgnoredAny>()?;
-                            // panic!("{} {}", self.def.source, self.def.file);
+                            upt.line_interval = Some(map.next_value::<f64>()?);
                         }
                     }
                 }
 
                 let def = match self.def {
-                    Some(def) => def.update_from_change(upt),
-                    None => MarketDefinition::new(upt),
+                    Some(def) => def.update_from_change(upt, self.py),
+                    None => MarketDefinition::new(upt, self.py),
                 }
                 .map_err(|err| {
                     Error::custom(format!("missing required field <{}>", err.missing_field))
