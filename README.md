@@ -84,7 +84,7 @@ Running over 3 months of Australian racing data on a 2021 M1 Macbook Pro.
 
 
 ## Types
-IDE's should automatically detect the types and provide checking and auto complete. See the [pyi stub file](betfair_data.pyi) for a comprehensive view of the types and method available.
+IDE's should automatically detect the types and provide checking and auto complete. See the [pyi stub file](betfair_data/betfair_data.pyi) for a comprehensive view of the types and method available.
 
 
 ## Betfairlightweight
