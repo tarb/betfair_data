@@ -12,7 +12,6 @@ paths = [
     "data/2021_12_DecRacingAUPro.tar"
 ]
 
-
 def run_with_py_loading():
     def load_tar(file_paths: Sequence[str]):
         for file_path in file_paths:
@@ -39,13 +38,12 @@ def run_with_rust_loading():
     market_count = 0
     update_count = 0
     
-    for file in bflw.Files(paths, streaming_unique_id=1000):
+    for file in bflw.Files(paths):
         market_count += 1
 
         for market_books in file:
             for market_book in market_books:
                 update_count += 1
-                print(f"{market_book.market_id} {file.stream_unique_id}")
 
         print(f"Market {market_count} Update {update_count} File:{file.file_name}", end='\r')
     print(f"Market {market_count} Update {update_count}")
