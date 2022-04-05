@@ -52,7 +52,7 @@ checksum = "8a32fd6af2b5827bce66c29053ba0e7c42b9dcab01835835058558c10851a46b"
 
 [[package]]
 name = "betfair_data"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "bzip2-rs",
  "chrono",
