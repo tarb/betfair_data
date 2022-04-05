@@ -24,7 +24,7 @@ paths = [
 market_count = 0
 update_count = 0
 
-for file in bfd.Files(paths).iter():
+for file in bfd.Files(paths):
     market_count += 1
 
     for market in file:
@@ -47,7 +47,7 @@ paths = [
     "data/uncompressed_market.json",
 
 ]
-files = bfd.Files(paths).iter()
+files = bfd.Files(paths)
 ```
 Or you can use the glob library to find and select all the paths automatically. 
 
@@ -55,7 +55,7 @@ Or you can use the glob library to find and select all the paths automatically.
 import glob
 
 paths = glob.glob("data/betfair_official/*.tar") + glob.glob("data/self_recorded/*.gz")
-files = bfd.Files(paths).iter()
+files = bfd.Files(paths)
 ```
 
 You can also load the file through any other means and pass the raw bytes and name into the File object constructor.
@@ -90,7 +90,9 @@ IDE's should automatically detect the types and provide checking and auto comple
 ## Betfairlightweight
 We also support a format that is a drop in replacement for ```betfairlightweight``` objects. We have rigorously tested it against betfairlightweight to ensure a complete match of its structure, any differences should be submitted as issues with the corresponding differences and the data used to create them.
 ```py
-files = betfair_data.Files(paths).bflw()
+from betfair_data import bflw
+
+files = bflw.Files(paths)
 ```
 
 ```py
@@ -112,9 +114,9 @@ logging.basicConfig(level=logging.WARN, format='%(levelname)s %(name)s %(message
 Example logged errors
 
 ```log
-WARNING betfair_data source: data/2021_10_OctRacingAUPro.tar file: PRO/2021/Oct/4/30970292/1.188542184.bz2 err: (JSON Parse Error) expected value at line 1480 column 1
-WARNING betfair_data source: data/2021_10_OctRacingAUPro.tar file: PRO/2021/Oct/8/30985584/1.188739324.bz2 err: (JSON Parse Error) expected `:` at line 1 column 909
-WARNING betfair_data source: data/2021_10_OctRacingAUPro.tar file: PRO/2021/Oct/8/30985584/1.188739325.bz2 err: (JSON Parse Error) expected `:` at line 1 column 904
-WARNING betfair_data source: data/2021_10_OctRacingAUPro.tar file: PRO/2021/Oct/15/31001342/1.189124831.bz2 err: (JSON Parse Error) expected value at line 1335 column 1
+WARNING betfair_data file: data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/4/30970292/1.188542184.bz2 err: (JSON Parse Error) expected value at line 1480 column 1
+WARNING betfair_data file: data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/8/30985584/1.188739324.bz2 err: (JSON Parse Error) expected `:` at line 1 column 909
+WARNING betfair_data file: data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/8/30985584/1.188739325.bz2 err: (JSON Parse Error) expected `:` at line 1 column 904
+WARNING betfair_data file: data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/15/31001342/1.189124831.bz2 err: (JSON Parse Error) expected value at line 1335 column 1
 ```
 

@@ -1,17 +1,16 @@
 use log::warn;
+use pyo3::PyClass;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 
 use crate::deser::DeserializerWithData;
 use crate::errors::IOErr;
+use crate::files::FilesSource;
 
-pub trait MarketSource: Iterator<Item = Result<SourceItem, IOErr>> {
-    fn config(&self) -> SourceConfig;
-}
+pub trait ConfigProducer {
+    type Config;
 
-#[derive(Debug, Clone, Copy)]
-pub struct SourceConfig {
-    pub cumulative_runner_tv: bool,
+    fn get(&mut self) -> Self::Config;
 }
 
 pub struct SourceItem {
@@ -25,28 +24,38 @@ impl SourceItem {
     }
 }
 
-pub struct Adapter<T: From<(SourceItem, SourceConfig)>> {
-    source: Box<dyn MarketSource + Send>,
+pub struct Adapter<C, T> {
+    source: FilesSource,
+    config: C,
     pd: PhantomData<T>,
 }
 
-impl<T: From<(SourceItem, SourceConfig)>> Adapter<T> {
-    pub fn new(source: Box<dyn MarketSource + Send>) -> Self {
+impl<C, T> Adapter<C, T>
+where
+    C: ConfigProducer,
+    C::Config: Copy + Clone,
+    T: From<(SourceItem, C::Config)> + PyClass,
+{
+    pub fn new(source: FilesSource, config: C) -> Self {
         Self {
             source,
+            config,
             pd: Default::default(),
         }
     }
 }
 
-impl<T: From<(SourceItem, SourceConfig)>> Adapter<T> {
+impl<C, T> Adapter<C, T>
+where
+    C: ConfigProducer,
+    C::Config: Copy + Clone,
+    T: From<(SourceItem, C::Config)> + PyClass,
+{
     pub fn next(&mut self) -> Option<T> {
-        let source_config = self.source.config();
-
         loop {
             match self.source.next() {
                 Some(Ok(si)) => {
-                    let file = T::from((si, source_config));
+                    let file = T::from((si, self.config.get()));
 
                     break Some(file);
                 }

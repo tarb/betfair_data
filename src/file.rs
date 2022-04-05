@@ -1,10 +1,10 @@
-use pyo3::{prelude::*};
+use pyo3::prelude::*;
 use std::path::{Path, PathBuf};
 
 use crate::file_iter::FileIter;
-use crate::immutable::file_iter::ImmutableRep;
+use crate::immutable::file::ImmutableRep;
 use crate::immutable::market::Market;
-use crate::mutable::file_iter::MutableRep;
+use crate::mutable::file::MutableRep;
 use crate::mutable::market::MarketMut;
 
 enum FileType {

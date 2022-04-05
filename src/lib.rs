@@ -19,8 +19,8 @@ mod deser;
 mod enums;
 mod errors;
 mod file;
-mod files;
 mod file_iter;
+mod files;
 mod ids;
 mod immutable;
 mod market_source;
@@ -29,7 +29,7 @@ mod price_size;
 mod py_rep;
 mod strings;
 
-use crate::bflw::file_iter::BflwFile;
+use crate::bflw::file::{BflwFile, BflwFiles};
 use crate::file::File;
 use crate::files::Files;
 use crate::price_size::PriceSize;
@@ -56,7 +56,7 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
     m.add_class::<Files>()?;
-    
+
     m.add_class::<File>()?;
     m.add_class::<PriceSize>()?;
     m.add_class::<Market>()?;
@@ -66,6 +66,7 @@ fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
 
     let bflw = PyModule::new(py, "bflw")?;
     bflw.add_class::<BflwFile>()?;
+    bflw.add_class::<BflwFiles>()?;
     bflw.add_class::<MarketBook>()?;
     bflw.add_class::<MarketDefinitionRunner>()?;
     bflw.add_class::<MarketDefinition>()?;

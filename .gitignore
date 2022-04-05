@@ -7,4 +7,5 @@ __pycache__
 *.exe
 *.txt
 *.rs_ignore
+**/*.so
 **/.DS_Store

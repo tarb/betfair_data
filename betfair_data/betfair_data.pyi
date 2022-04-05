@@ -1,6 +1,13 @@
 from typing import Iterator, List, Sequence, Optional
 from datetime import datetime
-from betfair_data import bflw
+
+class File(Iterator[Market]):
+    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True, mutable: bool = False) -> None: ...
+    file_name: str
+
+class Files(Iterator[File]):
+    """"""
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, mutable: bool = False) -> None: ...
 
 class Market():
     """
@@ -110,14 +117,5 @@ class PriceSize():
     price: float
     size: float
 
-# sources
-class MarketAdapter(Iterator[File]): ...
-class File(Iterator[Market]):
-    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True, mutable: bool = False) -> None: ...
-    file_name: str
+    def __init__(self, price: float, size: float) -> None: ...
 
-class Files():
-    """"""
-    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True) -> None: ...
-    def iter(self, mutable = False) -> MarketAdapter: ...
-    def bflw(self) -> bflw.BflwAdapter: ...

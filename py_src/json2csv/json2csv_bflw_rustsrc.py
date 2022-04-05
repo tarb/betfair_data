@@ -2,9 +2,8 @@ import logging
 import functools
 from typing import List, Tuple
 from itertools import zip_longest
-from betfair_data import PriceSize
 from betfair_data import bflw
-import betfair_data
+
 
 file_output = "output_rust_source.csv"
 
@@ -31,7 +30,7 @@ def min_gr0(a: float, b: float) -> float:
     return min(a, b)
 
 # parsing price data and pulling out weighted avg price, matched, min price and max price
-def parse_traded(traded: List[PriceSize]) -> Tuple[float, float, float, float]:
+def parse_traded(traded: List[bflw.PriceSize]) -> Tuple[float, float, float, float]:
     if len(traded) == 0: 
         return (None, None, None, None)
 
@@ -82,7 +81,7 @@ with open(file_output, "w") as output:
     # defining column headers
     output.write("market_id,event_date,country,track,market_name,selection_id,selection_name,result,bsp,pp_min,pp_max,pp_wap,pp_ltp,pp_volume,ip_min,ip_max,ip_wap,ip_ltp,ip_volume\n")
 
-    for i, g in enumerate(betfair_data.Files(market_paths).bflw()):
+    for i, g in enumerate(bflw.Files(market_paths)):
         print("Market {}".format(i), end='\r')
 
         def get_pre_post_final():
@@ -144,7 +143,7 @@ with open(file_output, "w") as output:
                 (pre_ltp, pre_traded), (post_ltp, post_traded, sp_traded) = r
 
                 inplay_only = list(filter(lambda ps: ps.size > 0, [
-                    PriceSize(
+                    bflw.PriceSize(
                         price=post_ps.price, 
                         size=post_ps.size - next((pre_ps.size for pre_ps in pre_traded if pre_ps.price == post_ps.price), 0)
                     )
@@ -167,7 +166,7 @@ with open(file_output, "w") as output:
                     'inplay_matched': as_str(ip_matched),
                 }
 
-            runner_traded = [ runner_vals(r) for r in zip_longest(preplay_traded, postplay_traded, fillvalue=PriceSize(0, 0)) ]
+            runner_traded = [ runner_vals(r) for r in zip_longest(preplay_traded, postplay_traded, fillvalue=bflw.PriceSize(0, 0)) ]
 
         # runner price data for markets that don't go in play
         else:

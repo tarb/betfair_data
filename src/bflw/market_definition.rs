@@ -5,6 +5,7 @@ use serde::{de, Deserialize, Deserializer};
 use std::borrow::Cow;
 use std::sync::Arc;
 
+use super::config::Config;
 use super::market_definition_runner::MarketDefinitionRunner;
 use super::runner_book::RunnerBook;
 use crate::bflw::market_definition_runner::RunnerDefSeq;
@@ -13,7 +14,6 @@ use crate::enums::{MarketBettingType, MarketStatus, PriceLadderDefinition};
 use crate::errors::DataError;
 use crate::ids::{EventID, EventTypeID};
 use crate::immutable::container::SyncObj;
-use crate::market_source::SourceConfig;
 use crate::strings::FixedSizeString;
 
 #[derive(Debug)]
@@ -509,7 +509,7 @@ pub struct MarketDefinitionDeser<'a, 'py> {
     pub def: Option<PyRef<'py, MarketDefinition>>,
     pub runners: Option<&'a Vec<Py<RunnerBook>>>,
     pub py: Python<'py>,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
     type Value = (Option<MarketDefinition>, Option<Vec<Py<RunnerBook>>>);
@@ -564,7 +564,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketDefinitionDeser<'a, 'py> {
             pub def: Option<PyRef<'py, MarketDefinition>>,
             pub runners: Option<&'a Vec<Py<RunnerBook>>>,
             pub py: Python<'py>,
-            pub config: SourceConfig,
+            pub config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketDefinitionVisitor<'a, 'py> {
             type Value = (Option<MarketDefinition>, Option<Vec<Py<RunnerBook>>>);

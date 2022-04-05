@@ -5,6 +5,7 @@ use serde_json::value::RawValue;
 use std::fmt;
 use std::sync::Arc;
 
+use super::config::Config;
 use super::market_definition::{MarketDefinition, MarketDefinitionKeyLine, PriceLadderDescription};
 use super::runner_book::RunnerBook;
 use crate::bflw::market_definition::MarketDefinitionDeser;
@@ -14,7 +15,6 @@ use crate::datetime::{DateTime, DateTimeString};
 use crate::enums::MarketStatus;
 use crate::ids::MarketID;
 use crate::immutable::container::SyncObj;
-use crate::market_source::SourceConfig;
 
 #[pyclass]
 pub struct MarketBook {
@@ -229,7 +229,7 @@ impl MarketBook {
 pub struct MarketBooksDeser<'a, 'py> {
     pub markets: &'a [Py<MarketBook>],
     pub py: Python<'py>,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
     type Value = Vec<Py<MarketBook>>;
@@ -250,7 +250,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
         struct MarketBooksDeserVisitor<'a, 'py> {
             markets: &'a [Py<MarketBook>],
             py: Python<'py>,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketBooksDeserVisitor<'a, 'py> {
             type Value = Vec<Py<MarketBook>>;
@@ -334,7 +334,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketBooksDeser<'a, 'py> {
 struct MarketMcSeq<'a, 'py> {
     markets: &'a [Py<MarketBook>],
     py: Python<'py>,
-    config: SourceConfig,
+    config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
     type Value = Vec<Py<MarketBook>>;
@@ -346,7 +346,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
         struct MarketMcSeqVisitor<'a, 'py> {
             markets: &'a [Py<MarketBook>],
             py: Python<'py>,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for MarketMcSeqVisitor<'a, 'py> {
             type Value = Vec<Py<MarketBook>>;
@@ -422,7 +422,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for MarketMcSeq<'a, 'py> {
 struct MarketMc<'py> {
     market: Option<PyRef<'py, MarketBook>>,
     py: Python<'py>,
-    config: SourceConfig,
+    config: Config,
 }
 impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
     type Value = MarketBook;
@@ -449,7 +449,7 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
         struct MarketMcVisitor<'py> {
             market: Option<PyRef<'py, MarketBook>>,
             py: Python<'py>,
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'py> Visitor<'de> for MarketMcVisitor<'py> {
             type Value = MarketBook;
