@@ -40,7 +40,7 @@ def run_with_rust_loading():
     market_count = 0
     update_count = 0
 
-    for file in bfd.Files(paths, cumulative_runner_tv=True).iter(mutable=mutable):
+    for file in bfd.Files(paths, mutable=mutable):
         market_count += 1
 
         for market in file:

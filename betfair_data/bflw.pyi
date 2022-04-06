@@ -1,12 +1,16 @@
 from datetime import datetime
 from typing import Iterator, Optional, Sequence, List, str
-import betfair_data
-
-class BflwAdapter(Iterator[File]): ...
+from betfair_data import RunnerBookEX as RunnerBookEX, RunnerBookSP as RunnerBookSP, PriceSize as PriceSize
 
 class File(Iterator[Sequence[MarketBook]]):
-    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True) -> None: ...
     file_name: str
+    stream_unique_id: Optional[int]
+    
+    def __init__(self, path: str, bytes: bytes, cumulative_runner_tv: bool = True, streaming_unique_id: Optional[int] = None) -> None: ...
+
+class Files(Iterator[File]):
+    """"""
+    def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, streaming_unique_id: Optional[int] = None) -> None: ...
 
 class MarketBook:
     bet_delay: int
@@ -34,12 +38,12 @@ class MarketBook:
 
 class RunnerBook:
     adjustment_factor: float
-    ex: betfair_data.RunnerBookEX
+    ex: RunnerBookEX
     handicap: float
     last_price_traded: float
     removal_date: datetime
     selection_id: int
-    sp: betfair_data.RunnerBookSP
+    sp: RunnerBookSP
     status: str
     total_matched: float
     matches: None

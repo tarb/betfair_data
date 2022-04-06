@@ -4,31 +4,7 @@ use std::path::Path;
 use super::market::{Market, MarketsDeser};
 use crate::config::Config;
 use crate::file_iter::{FileIter, IntoMarketIter, MarketID};
-use crate::market_source::{Adapter, MarketSource, SourceConfig, SourceItem};
-
-#[pyclass]
-pub struct ImmutAdapter {
-    inner: Adapter<File>,
-}
-
-impl ImmutAdapter {
-    pub fn new(source: Box<dyn MarketSource + Send>) -> Self {
-        Self {
-            inner: Adapter::new(source),
-        }
-    }
-}
-
-#[pymethods]
-impl ImmutAdapter {
-    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
-        slf
-    }
-
-    fn __next__(&mut self, py: Python) -> Option<PyObject> {
-        self.inner.next().map(|f| f.into_py(py))
-    }
-}
+use crate::market_source::SourceItem;
 
 #[pyclass(name = "File")]
 pub struct File {
@@ -51,8 +27,8 @@ impl File {
     }
 }
 
-impl From<(SourceItem, SourceConfig)> for File {
-    fn from(s: (SourceItem, SourceConfig)) -> Self {
+impl From<(SourceItem, Config)> for File {
+    fn from(s: (SourceItem, Config)) -> Self {
         Self {
             inner: FileIter::from(s),
         }

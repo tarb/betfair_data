@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use crate::config::Config;
 use crate::deser::DeserializerWithData;
 use crate::immutable::container::SyncObj;
-use crate::market_source::{SourceConfig, SourceItem};
+use crate::market_source::SourceItem;
 
 pub trait IntoMarketIter {
     type Market: pyo3::PyClass + MarketID;
@@ -34,10 +34,10 @@ pub struct FileIter<T: pyo3::PyClass + MarketID, I: IntoMarketIter<Market = T>> 
     pd: PhantomData<I>,
 }
 
-impl<T: pyo3::PyClass + MarketID, I: IntoMarketIter<Market = T>> From<(SourceItem, SourceConfig)>
+impl<T: pyo3::PyClass + MarketID, I: IntoMarketIter<Market = T>> From<(SourceItem, Config)>
     for FileIter<T, I>
 {
-    fn from(s: (SourceItem, SourceConfig)) -> Self {
+    fn from(s: (SourceItem, Config)) -> Self {
         let (item, config) = s;
 
         let config = Config {

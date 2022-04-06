@@ -1,3 +1,9 @@
+use super::config::Config;
+use super::{float_str::FloatStr, runner_book::RunnerBook};
+use crate::{
+    datetime::DateTimeString, enums::SelectionStatus, ids::SelectionID,
+    immutable::container::SyncObj, py_rep::PyRep,
+};
 use core::fmt;
 use pyo3::{prelude::*, types::PyList};
 use serde::{
@@ -5,12 +11,6 @@ use serde::{
     Deserialize, Deserializer,
 };
 use std::sync::Arc;
-
-use super::{float_str::FloatStr, runner_book::RunnerBook};
-use crate::{
-    datetime::DateTimeString, enums::SelectionStatus, ids::SelectionID,
-    immutable::container::SyncObj, market_source::SourceConfig, py_rep::PyRep,
-};
 
 /*
 def __str__(self):
@@ -102,24 +102,20 @@ impl MarketDefinitionRunner {
             adjustment_factor: change.adjustment_factor,
             bsp: change.bsp,
             sort_priority: change.sort_priority,
-            name: change
-                .name
-                .and_then(|n| {
-                    if self.name.contains(&n) {
-                        self.name.clone()
-                    } else {
-                        Some(SyncObj::new(Arc::from(n)))
-                    }
-                }),
-            removal_date: change
-                .removal_date
-                .and_then(|n| {
-                    if self.removal_date.contains(&n) {
-                        self.removal_date.clone()
-                    } else {
-                        Some(SyncObj::new(DateTimeString::new(n).unwrap()))
-                    }
-                }),
+            name: change.name.and_then(|n| {
+                if self.name.contains(&n) {
+                    self.name.clone()
+                } else {
+                    Some(SyncObj::new(Arc::from(n)))
+                }
+            }),
+            removal_date: change.removal_date.and_then(|n| {
+                if self.removal_date.contains(&n) {
+                    self.removal_date.clone()
+                } else {
+                    Some(SyncObj::new(DateTimeString::new(n).unwrap()))
+                }
+            }),
         }
     }
 }
@@ -134,7 +130,7 @@ pub struct RunnerDefSeq<'a, 'py> {
     pub defs: Option<&'a Vec<Py<MarketDefinitionRunner>>>,
     pub books: Option<&'a Vec<Py<RunnerBook>>>,
     pub py: Python<'py>,
-    pub config: SourceConfig,
+    pub config: Config,
 }
 impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
     type Value = (
@@ -151,7 +147,7 @@ impl<'de, 'a, 'py> DeserializeSeed<'de> for RunnerDefSeq<'a, 'py> {
             books: Option<&'a Vec<Py<RunnerBook>>>,
             py: Python<'py>,
             #[allow(dead_code)]
-            config: SourceConfig,
+            config: Config,
         }
         impl<'de, 'a, 'py> Visitor<'de> for RunnerSeqVisitor<'a, 'py> {
             type Value = (

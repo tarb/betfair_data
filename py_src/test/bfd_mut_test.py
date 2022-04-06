@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.INFO, format='%(levelname)s %(name)s %(message
 
 paths = glob.glob("data/*OtherSports*")
 
-mut = bfd.Files(paths, cumulative_runner_tv=True).iter(mutable=True)
-imm = bfd.Files(paths, cumulative_runner_tv=True).iter(mutable=False)
+mut = bfd.Files(paths, cumulative_runner_tv=True, mutable=True)
+imm = bfd.Files(paths, cumulative_runner_tv=True, mutable=False)
 
 def start_test():
     market_count = 0

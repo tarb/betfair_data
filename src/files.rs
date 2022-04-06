@@ -3,7 +3,6 @@ use crossbeam_channel::{bounded, Receiver};
 use flate2::bufread::GzDecoder;
 use ouroboros::self_referencing;
 use pyo3::exceptions;
-use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PySequence, PyString};
 use std::fs::File;
@@ -15,27 +14,31 @@ use tar::Archive as TarArchive;
 use tar::Entries;
 use zip::ZipArchive;
 
-use crate::bflw::file_iter::BflwAdapter;
+use crate::config::Config;
 use crate::deser::DeserializerWithData;
 use crate::errors::IOErr;
-use crate::immutable::file_iter::ImmutAdapter;
-use crate::market_source::{MarketSource, SourceConfig, SourceItem};
-use crate::mutable::file_iter::MutAdapter;
+use crate::immutable::file::File as ImmutFile;
+use crate::market_source::{Adapter, SourceItem};
+use crate::mutable::file::File as MutFile;
 
 const NUM_BUFFERED: usize = 50;
 
+enum FileType {
+    Mutable(Adapter<Config, MutFile>),
+    Immutable(Adapter<Config, ImmutFile>),
+}
+
 #[pyclass]
 pub struct Files {
-    // optional, so that we can take ownership of the source
-    source: Option<FilesSource>,
+    adapter: FileType,
 }
 
 #[pymethods]
 impl Files {
     #[new]
-    #[args(cumulative_runner_tv = "true")]
-    fn __new__(paths: &PySequence, cumulative_runner_tv: bool) -> PyResult<Self> {
-        let config = SourceConfig {
+    #[args(cumulative_runner_tv = "true", mutable = "false")]
+    fn __new__(paths: &PySequence, cumulative_runner_tv: bool, mutable: bool) -> PyResult<Self> {
+        let config = Config {
             cumulative_runner_tv,
         };
 
@@ -46,46 +49,32 @@ impl Files {
             .map(PathBuf::from)
             .collect::<Vec<_>>();
 
-        let t = FilesSource::new(source, config).map_err(|op: std::io::Error| {
+        let fs = FilesSource::new(source).map_err(|op: std::io::Error| {
             PyErr::new::<exceptions::PyRuntimeError, _>(op.to_string())
         })?;
 
-        Ok(Self { source: Some(t) })
+        let adapter = match mutable {
+            true => FileType::Mutable(Adapter::new(fs, config)),
+            false => FileType::Immutable(Adapter::new(fs, config)),
+        };
+
+        Ok(Self { adapter })
     }
 
-    #[pyo3(name = "iter")]
-    #[args(mutable = "false")]
-    fn iter_adapter(&mut self, py: Python, mutable: bool) -> PyResult<PyObject> {
-        let source = self.source.take();
-
-        match source {
-            Some(s) if mutable => Ok(MutAdapter::new(Box::new(s)).into_py(py)),
-            Some(s) => Ok(ImmutAdapter::new(Box::new(s)).into_py(py)),
-
-            None => Err(PyRuntimeError::new_err("empty source")),
-        }
+    fn __iter__(slf: PyRef<Self>) -> PyRef<Self> {
+        slf
     }
 
-    #[pyo3(name = "bflw")]
-    fn bflw_adapter(&mut self) -> PyResult<BflwAdapter> {
-        let source = self.source.take();
-
-        match source {
-            Some(s) => Ok(BflwAdapter::new(Box::new(s))),
-            None => Err(PyRuntimeError::new_err("empty source")),
+    fn __next__(&mut self, py: Python) -> Option<PyObject> {
+        match &mut self.adapter {
+            FileType::Mutable(a) => a.next().map(|f| f.into_py(py)),
+            FileType::Immutable(a) => a.next().map(|f| f.into_py(py)),
         }
     }
 }
 
-struct FilesSource {
+pub struct FilesSource {
     chan: Receiver<Result<SourceItem, IOErr>>,
-    config: SourceConfig,
-}
-
-impl MarketSource for FilesSource {
-    fn config(&self) -> SourceConfig {
-        self.config
-    }
 }
 
 impl Iterator for FilesSource {
@@ -97,7 +86,7 @@ impl Iterator for FilesSource {
 }
 
 impl FilesSource {
-    fn new(paths: Vec<PathBuf>, config: SourceConfig) -> Result<Self, Error> {
+    pub fn new(paths: Vec<PathBuf>) -> Result<Self, Error> {
         let (data_send, data_recv) = bounded(NUM_BUFFERED);
 
         rayon::spawn(move || {
@@ -119,10 +108,7 @@ impl FilesSource {
                 .try_for_each(|r: Result<SourceItem, IOErr>| data_send.send(r));
         });
 
-        Ok(Self {
-            chan: data_recv,
-            config,
-        })
+        Ok(Self { chan: data_recv })
     }
 }
 
@@ -162,10 +148,6 @@ fn handle_buffer(path: PathBuf, buf: Vec<u8>) -> Result<SourceItem, IOErr> {
             let mut dec = GzDecoder::new(&buf[..]);
             let mut out_buf = Vec::with_capacity(buf.len());
             dec.read_to_end(&mut out_buf).map(|_| out_buf)
-
-            // let bb = b.unwrap();
-            // println!("{:?}", std::str::from_utf8(&bb).unwrap());
-            // Ok(bb)
         }
         Some("bz2") => {
             let mut dec =
@@ -310,7 +292,7 @@ impl Iterator for ZipEntriesIter {
                     break Some(Err(IOErr {
                         file: None,
                         err: err.into(),
-                    }))
+                    }));
                 }
             }
         }

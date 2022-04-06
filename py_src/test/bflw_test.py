@@ -8,10 +8,9 @@ import gzip
 import os
 import unittest.mock
 import betfairlightweight
-import betfair_data
 
 # types
-from betfair_data import bflw
+from betfair_data import bflw as bfd_bflw
 import betfairlightweight.resources.bettingresources as bflw
 import betfairlightweight.resources.streamingresources as bflws
 
@@ -24,7 +23,7 @@ paths = glob("data/stream/*")
 #     "data/2021_11_NovRacingAUPro.tar",
 # ]
 
-bfd_source = betfair_data.Files(paths, cumulative_runner_tv=False).bflw()
+bfd_source = bfd_bflw.Files(paths, cumulative_runner_tv=False)
 
 def bflw_source(file_paths: Sequence[str]):
     trading = betfairlightweight.APIClient("username", "password", "appkey")
@@ -74,7 +73,7 @@ def run_test():
         print(f"Updates Tested {bfd_file.file_name} files:{files} updates:{updates}", end='\r')
     print(f"Updates Tested files:{files} updates:{updates}")
 
-def test_MarketBook(bfd_m: bfd.MarketBook, bflw_m: bflw.MarketBook, file_name: str, row: int):
+def test_MarketBook(bfd_m: bfd_bflw.MarketBook, bflw_m: bflw.MarketBook, file_name: str, row: int):
     assert bfd_m.bet_delay == bflw_m.bet_delay, f"{file_name}:{row} <MarketBook> bet_delay {bfd_m.bet_delay} != {bflw_m.bet_delay}"
     assert bfd_m.bsp_reconciled == bflw_m.bsp_reconciled, f"{file_name}:{row} <MarketBook> bsp_reconciled {bfd_m.bsp_reconciled} != {bflw_m.bsp_reconciled}"
     assert bfd_m.complete == bflw_m.complete, f"{file_name}:{row} <MarketBook> complete {bfd_m.complete} != {bflw_m.complete}"
@@ -97,7 +96,7 @@ def test_MarketBook(bfd_m: bfd.MarketBook, bflw_m: bflw.MarketBook, file_name: s
     for bfd_rb, bflw_rb in zip(bfd_m.runners, bflw_m.runners):
         test_RunnerBook(bfd_rb, bflw_rb, file_name, row) 
 
-def test_MarketDefinition(bfd_md: bfd.MarketDefinition, bflw_md: bflws.MarketDefinition, file_name: str, row: int):
+def test_MarketDefinition(bfd_md: bfd_bflw.MarketDefinition, bflw_md: bflws.MarketDefinition, file_name: str, row: int):
     assert bfd_md.bet_delay == bflw_md.bet_delay, f"{file_name}:{row} <MarketDefinition> bet_delay {bfd_md.bet_delay} != {bflw_md.bet_delay}"
     assert bfd_md.betting_type == bflw_md.betting_type, f"{file_name}:{row} <MarketDefinition> betting_type {bfd_md.betting_type} != {bflw_md.betting_type}"
     assert bfd_md.bsp_market == bflw_md.bsp_market, f"{file_name}:{row} <MarketDefinition> bsp_market {bfd_md.bsp_market} != {bflw_md.bsp_market}"
@@ -128,7 +127,7 @@ def test_MarketDefinition(bfd_md: bfd.MarketDefinition, bflw_md: bflws.MarketDef
     for bfd_rd, bflw_rd in zip(bfd_md.runners, bflw_md.runners):
         test_MarketDefinitionRunner(bfd_rd, bflw_rd, file_name, row) 
 
-def test_MarketDefinitionRunner(bfd_rd: bfd.MarketDefinitionRunner, bflw_rd: bflws.MarketDefinitionRunner, file_name: str, row: int):
+def test_MarketDefinitionRunner(bfd_rd: bfd_bflw.MarketDefinitionRunner, bflw_rd: bflws.MarketDefinitionRunner, file_name: str, row: int):
     assert bfd_rd.selection_id == bflw_rd.selection_id, f"{file_name}:{row} <MarketDefinitionRunner> selection_id {bfd_rd.selection_id} != {bflw_rd.selection_id}"
     assert test_float(bfd_rd.adjustment_factor, bflw_rd.adjustment_factor), f"{file_name}:{row} <MarketDefinitionRunner> adjustment_factor {bfd_rd.adjustment_factor} != {bflw_rd.adjustment_factor}"
     assert bfd_rd.removal_date == bflw_rd.removal_date, f"{file_name}:{row} <MarketDefinitionRunner> removal_date {bfd_rd.removal_date} != {bflw_rd.removal_date}"
@@ -138,7 +137,7 @@ def test_MarketDefinitionRunner(bfd_rd: bfd.MarketDefinitionRunner, bflw_rd: bfl
     assert test_float(bfd_rd.handicap, bflw_rd.handicap), f"{file_name}:{row} <MarketDefinitionRunner> handicap {bfd_rd.handicap} != {bflw_rd.handicap}"
     assert bfd_rd.name == bflw_rd.name, f"{file_name}:{row} <MarketDefinitionRunner> name {bfd_rd.name} != {bflw_rd.name}"
     
-def test_RunnerBook(bfd_rb: bfd.RunnerBook, bflw_rb: bflw.RunnerBook, file_name: str, row: int):
+def test_RunnerBook(bfd_rb: bfd_bflw.RunnerBook, bflw_rb: bflw.RunnerBook, file_name: str, row: int):
     assert bfd_rb.selection_id == bflw_rb.selection_id, f"{file_name}:{row} <RunnerBook> selection_id {bfd_rb.selection_id} != {bflw_rb.selection_id}"
     assert bfd_rb.adjustment_factor == bflw_rb.adjustment_factor, f"{file_name}:{row} <RunnerBook> adjustment_factor {bfd_rb.adjustment_factor} != {bflw_rb.adjustment_factor}"
     assert bfd_rb.handicap == bflw_rb.handicap, f"{file_name}:{row} <RunnerBook> handicap {bfd_rb.handicap} != {bflw_rb.handicap}"
@@ -151,19 +150,19 @@ def test_RunnerBook(bfd_rb: bfd.RunnerBook, bflw_rb: bflw.RunnerBook, file_name:
     test_RunnerBookEX(bfd_rb.ex, bflw_rb.ex, bfd_rb.selection_id, file_name, row)
     test_RunnerBookSP(bfd_rb.sp, bflw_rb.sp, bfd_rb.selection_id, file_name, row)
     
-def test_RunnerBookEX(bfd_ex: betfair_data.RunnerBookEX, bflw_ex: bflw.RunnerBookEX, sid: int, file_name: str, row: int):
+def test_RunnerBookEX(bfd_ex: bfd_bflw.RunnerBookEX, bflw_ex: bflw.RunnerBookEX, sid: int, file_name: str, row: int):
     test_ListPriceSize(bfd_ex.available_to_back, bflw_ex.available_to_back, f"{file_name}:{row} <RunnerBookEX[{sid}].available_to_back>")
     test_ListPriceSize(bfd_ex.available_to_lay, bflw_ex.available_to_lay, f"{file_name}:{row} <RunnerBookEX[{sid}].available_to_lay>")
     test_ListPriceSize(bfd_ex.traded_volume, bflw_ex.traded_volume, f"{file_name}:{row} <RunnerBookEX[{sid}].traded_volume>")
 
-def test_RunnerBookSP(bfd_sp: betfair_data.RunnerBookSP, bflw_sp: bflw.RunnerBookSP, sid: int, file_name: str, row: int):
+def test_RunnerBookSP(bfd_sp: bfd_bflw.RunnerBookSP, bflw_sp: bflw.RunnerBookSP, sid: int, file_name: str, row: int):
     assert test_float(bfd_sp.far_price, bflw_sp.far_price), f"{file_name}:{row} <RunnerBookSP> far_price {bfd_sp.far_price} != {bflw_sp.far_price}"
     assert test_float(bfd_sp.near_price, bflw_sp.near_price), f"{file_name}:{row} <RunnerBookSP> near_price {bfd_sp.near_price} != {bflw_sp.near_price}"
     assert test_float(bfd_sp.actual_sp, bflw_sp.actual_sp), f"{file_name}:{row} <RunnerBookSP> actual_sp {bfd_sp.actual_sp} != {bflw_sp.actual_sp}"
     test_ListPriceSize(bfd_sp.back_stake_taken, bflw_sp.back_stake_taken, f"{file_name}:{row} <RunnerBookSP[{sid}].back_stake_taken>")
     test_ListPriceSize(bfd_sp.lay_liability_taken, bflw_sp.lay_liability_taken, f"{file_name}:{row} <RunnerBookSP[{sid}].lay_liability_taken>")
 
-def test_ListPriceSize(bfd_ps: List[betfair_data.PriceSize], bflw_ps: List[bflw.PriceSize], context: str):
+def test_ListPriceSize(bfd_ps: List[bfd_bflw.PriceSize], bflw_ps: List[bflw.PriceSize], context: str):
     assert len(bfd_ps) == len(bflw_ps), f"{context} <List[PriceSize]> different lengths {print_ladder(bfd_ps)} != {print_ladder(bflw_ps)}"
     for i, (bfd, bflw) in enumerate(zip(bfd_ps, bflw_ps)):
         assert test_float(bfd.price, bflw.price), f"{context} <List[PriceSize][{i}]> PriceError {print_ladder(bfd_ps)} != {print_ladder(bflw_ps)}"
@@ -177,7 +176,7 @@ def test_float(f1: float|str|NoneType, f2: float|str|int|NoneType) -> bool:
 
     return f1 == f2
 
-def print_ladder(ladder: List[bflw.PriceSize]) -> str:
+def print_ladder(ladder: List[bfd_bflw.PriceSize]) -> str:
     return ' '.join(list(f"[{ps.price}, {ps.size}]" for ps in ladder))
 
 
