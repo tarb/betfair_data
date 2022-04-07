@@ -42,14 +42,8 @@ impl Files {
             cumulative_runner_tv,
         };
 
-        let source = (0..paths.len().unwrap_or(0))
-            .filter_map(|index| paths.get_item(index).ok())
-            .filter_map(|any| any.downcast::<PyString>().map(|ps| ps.to_str()).ok())
-            .filter_map(|s| s.ok())
-            .map(PathBuf::from)
-            .collect::<Vec<_>>();
-
-        let fs = FilesSource::new(source).map_err(|op: std::io::Error| {
+        let paths = FilesSource::get_paths(paths);
+        let fs = FilesSource::new(paths).map_err(|op: std::io::Error| {
             PyErr::new::<exceptions::PyRuntimeError, _>(op.to_string())
         })?;
 
@@ -110,6 +104,15 @@ impl FilesSource {
 
         Ok(Self { chan: data_recv })
     }
+
+    pub fn get_paths(paths: &PySequence) -> Vec<PathBuf> {
+        (0..paths.len().unwrap_or(0))
+            .filter_map(|index| paths.get_item(index).ok())
+            .filter_map(|any| any.downcast::<PyString>().map(|ps| ps.to_str()).ok())
+            .filter_map(|s| s.ok())
+            .map(PathBuf::from)
+            .collect::<Vec<_>>()
+    }
 }
 
 type BoxedArchiveIter = Box<dyn Iterator<Item = Result<(PathBuf, Vec<u8>), IOErr>>>;
@@ -118,7 +121,7 @@ fn handle_file(path: PathBuf, mut file: File) -> Result<BoxedArchiveIter, IOErr>
     match path.extension().and_then(|s| s.to_str()) {
         Some("tar") => Ok(Box::new(TarEntriesIter::build(path, file))),
         Some("zip") => Ok(Box::new(ZipEntriesIter::try_build(path, file)?)),
-        Some("json") | Some("gz") | Some("bz2") => {
+        Some("json") | Some("gz") | Some("bz2") | None => {
             let buf = try {
                 let file_size = file.metadata()?.len();
                 let mut buf: Vec<u8> = Vec::with_capacity(file_size as usize);
@@ -135,7 +138,7 @@ fn handle_file(path: PathBuf, mut file: File) -> Result<BoxedArchiveIter, IOErr>
                 }),
             }
         }
-        _ => Err(IOErr {
+        Some(_) => Err(IOErr {
             err: Error::new(ErrorKind::Unsupported, "unsupported file type"),
             file: Some(path),
         }),
@@ -155,12 +158,11 @@ fn handle_buffer(path: PathBuf, buf: Vec<u8>) -> Result<SourceItem, IOErr> {
             let mut out_buf = Vec::with_capacity(buf.len());
             dec.read_to_end(&mut out_buf).map(|_| out_buf)
         }
-        Some("json") => Ok(buf),
+        Some("json") | None => Ok(buf),
         Some(ext) => Err(Error::new(
             ErrorKind::Unsupported,
             format!("unsupported extension {}", ext),
         )),
-        None => Err(Error::new(ErrorKind::Unsupported, "missing file extension")),
     }
     .and_then(DeserializerWithData::build);
 

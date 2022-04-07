@@ -1,5 +1,5 @@
 use log::warn;
-use pyo3::types::{PySequence, PyString};
+use pyo3::types::PySequence;
 use pyo3::{exceptions, prelude::*};
 use serde::de::DeserializeSeed;
 use std::path::PathBuf;
@@ -30,14 +30,8 @@ impl BflwFiles {
             streaming_unique_id,
         };
 
-        let source = (0..paths.len().unwrap_or(0))
-            .filter_map(|index| paths.get_item(index).ok())
-            .filter_map(|any| any.downcast::<PyString>().map(|ps| ps.to_str()).ok())
-            .filter_map(|s| s.ok())
-            .map(PathBuf::from)
-            .collect::<Vec<_>>();
-
-        let fs = FilesSource::new(source).map_err(|op: std::io::Error| {
+        let paths = FilesSource::get_paths(paths);
+        let fs = FilesSource::new(paths).map_err(|op: std::io::Error| {
             PyErr::new::<exceptions::PyRuntimeError, _>(op.to_string())
         })?;
 

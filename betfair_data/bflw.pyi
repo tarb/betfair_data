@@ -13,6 +13,7 @@ class Files(Iterator[File]):
     def __init__(self, paths: Sequence[str], cumulative_runner_tv: bool = True, streaming_unique_id: Optional[int] = None) -> None: ...
 
 class MarketBook:
+    streaming_unique_id: Optional[int]
     bet_delay: int
     bsp_reconciled: bool
     complete: bool

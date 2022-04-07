@@ -19,6 +19,8 @@ use crate::immutable::container::SyncObj;
 #[pyclass]
 pub struct MarketBook {
     #[pyo3(get)]
+    pub streaming_unique_id: Option<u32>,
+    #[pyo3(get)]
     pub publish_time: DateTime,
     #[pyo3(get)]
     pub bet_delay: u16,
@@ -60,7 +62,8 @@ pub struct MarketBook {
 
 #[derive(Default)]
 struct MarketBookUpdate<'a> {
-    market_id: &'a str,
+    market_id: Option<&'a str>,
+    streaming_unique_id: Option<u32>,
     definition: Option<MarketDefinition>,
     runners: Option<Vec<Py<RunnerBook>>>,
     total_volume: Option<f64>,
@@ -95,6 +98,7 @@ impl MarketBook {
 
 impl MarketBook {
     fn new(change: MarketBookUpdate, py: Python) -> Self {
+        // What to do when definition or market id arnt present (we currently panic)
         let def = change.definition.unwrap(); // fix unwrap
 
         // maybe theres a better way to calculate this
@@ -115,7 +119,11 @@ impl MarketBook {
         //     .unwrap_or_default();
 
         Self {
-            market_id: SyncObj::new(MarketID::try_from(change.market_id).unwrap()),
+            streaming_unique_id: change.streaming_unique_id,
+            market_id: change
+                .market_id
+                .map(|mid| SyncObj::new(MarketID::try_from(mid).unwrap()))
+                .unwrap(),
             runners: SyncObj::new(Arc::new(change.runners.unwrap_or_default())),
             total_matched: change.total_volume.unwrap_or_default(),
             bet_delay: def.bet_delay,
@@ -152,6 +160,7 @@ impl MarketBook {
         // });
 
         Self {
+            streaming_unique_id: self.streaming_unique_id,
             market_id: self.market_id.clone(),
             runners: change
                 .runners
@@ -462,12 +471,19 @@ impl<'de, 'py> DeserializeSeed<'de> for MarketMc<'py> {
             where
                 V: MapAccess<'de>,
             {
-                let mut upt = MarketBookUpdate::default();
+                let mut upt = MarketBookUpdate {
+                    streaming_unique_id: self.config.streaming_unique_id,
+                    market_id: None,
+                    definition: None,
+                    runners: None,
+                    total_volume: None,
+                };
+
                 while let Some(key) = map.next_key()? {
                     match key {
                         Field::Id => {
                             let s = map.next_value::<&str>()?;
-                            upt.market_id = s;
+                            upt.market_id = Some(s);
                         }
                         Field::MarketDefinition => {
                             let def = self
