@@ -1,6 +1,6 @@
 [package]
 name = "betfair_data"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 
 [lib]
@@ -26,6 +26,7 @@ flate2 = "1.0"
 zip = { version = "0.6.0" }
 staticvec = { version = "0.11.3", features = ["serde"] }
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rayon", "nightly"]}
+regex = "1"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 mimalloc = { version = "*", default-features = false }

@@ -5,10 +5,13 @@ use ouroboros::self_referencing;
 use pyo3::exceptions;
 use pyo3::prelude::*;
 use pyo3::types::{PySequence, PyString};
+use regex::Regex;
 use std::fs::File;
 use std::io::Read;
 use std::io::{Error, ErrorKind};
 use std::iter;
+use std::lazy::SyncOnceCell;
+use std::path::Path;
 use std::path::PathBuf;
 use tar::Archive as TarArchive;
 use tar::Entries;
@@ -22,6 +25,19 @@ use crate::market_source::{Adapter, SourceItem};
 use crate::mutable::file::File as MutFile;
 
 const NUM_BUFFERED: usize = 50;
+
+static MID_RXP: SyncOnceCell<Regex> = SyncOnceCell::new();
+fn is_filename_marketid(p: &Path) -> bool {
+    p.file_name()
+        .map(|name| {
+            let name = name.to_string_lossy();
+
+            MID_RXP
+                .get_or_init(|| Regex::new(r"^\d{1}.\d{9}$").unwrap())
+                .is_match(&name)
+        })
+        .unwrap_or(false)
+}
 
 enum FileType {
     Mutable(Adapter<Config, MutFile>),
@@ -115,29 +131,55 @@ impl FilesSource {
     }
 }
 
-type BoxedArchiveIter = Box<dyn Iterator<Item = Result<(PathBuf, Vec<u8>), IOErr>>>;
+enum Buffer {
+    Gz(Vec<u8>),
+    Bz2(Vec<u8>),
+    PlainText(Vec<u8>),
+}
 
-fn handle_file(path: PathBuf, mut file: File) -> Result<BoxedArchiveIter, IOErr> {
+type BoxedArchiveIter = Box<dyn Iterator<Item = Result<(PathBuf, Buffer), IOErr>>>;
+
+fn handle_file(path: PathBuf, file: File) -> Result<BoxedArchiveIter, IOErr> {
+    #[inline]
+    fn handle(mut file: File) -> Result<Vec<u8>, std::io::Error> {
+        let file_size = file.metadata()?.len();
+        let mut buf: Vec<u8> = Vec::with_capacity(file_size as usize);
+        file.read_to_end(&mut buf)?;
+
+        Ok(buf)
+    }
+    #[inline]
+    fn into_iter(path: PathBuf, buf: Buffer) -> BoxedArchiveIter {
+        Box::new(iter::once(Ok((path, buf))))
+    }
+    #[inline]
+    fn map_err(path: PathBuf, err: std::io::Error) -> IOErr {
+        IOErr {
+            file: Some(path),
+            err,
+        }
+    }
+
     match path.extension().and_then(|s| s.to_str()) {
         Some("tar") => Ok(Box::new(TarEntriesIter::build(path, file))),
         Some("zip") => Ok(Box::new(ZipEntriesIter::try_build(path, file)?)),
-        Some("json") | Some("gz") | Some("bz2") | None => {
-            let buf = try {
-                let file_size = file.metadata()?.len();
-                let mut buf: Vec<u8> = Vec::with_capacity(file_size as usize);
-                file.read_to_end(&mut buf)?;
-
-                buf
-            };
-
-            match buf {
-                Ok(buf) => Ok(Box::new(iter::once(Ok((path, buf))))),
-                Err(err) => Err(IOErr {
-                    file: Some(path),
-                    err,
-                }),
-            }
-        }
+        Some("gz") => match handle(file) {
+            Ok(buf) => Ok(into_iter(path, Buffer::Gz(buf))),
+            Err(err) => Err(map_err(path, err)),
+        },
+        Some("bz2") => match handle(file) {
+            Ok(buf) => Ok(into_iter(path, Buffer::Bz2(buf))),
+            Err(err) => Err(map_err(path, err)),
+        },
+        Some("json") | None => match handle(file) {
+            Ok(buf) => Ok(into_iter(path, Buffer::PlainText(buf))),
+            Err(err) => Err(map_err(path, err)),
+        },
+        // handle weird extensions as the result of the file being the market id. ie 1.123456789 would have an '123456789' extension
+        Some(_) if is_filename_marketid(&path) => match handle(file) {
+            Ok(buf) => Ok(into_iter(path, Buffer::PlainText(buf))),
+            Err(err) => Err(map_err(path, err)),
+        },
         Some(_) => Err(IOErr {
             err: Error::new(ErrorKind::Unsupported, "unsupported file type"),
             file: Some(path),
@@ -145,24 +187,20 @@ fn handle_file(path: PathBuf, mut file: File) -> Result<BoxedArchiveIter, IOErr>
     }
 }
 
-fn handle_buffer(path: PathBuf, buf: Vec<u8>) -> Result<SourceItem, IOErr> {
-    let r = match path.extension().and_then(|s| s.to_str()) {
-        Some("gz") => {
+fn handle_buffer(path: PathBuf, buf: Buffer) -> Result<SourceItem, IOErr> {
+    let r = match buf {
+        Buffer::Gz(buf) => {
             let mut dec = GzDecoder::new(&buf[..]);
             let mut out_buf = Vec::with_capacity(buf.len());
             dec.read_to_end(&mut out_buf).map(|_| out_buf)
         }
-        Some("bz2") => {
+        Buffer::Bz2(buf) => {
             let mut dec =
                 ParallelDecoderReader::new(&buf[..], bzip2_rs::RayonThreadPool, 1024 * 1024);
             let mut out_buf = Vec::with_capacity(buf.len());
             dec.read_to_end(&mut out_buf).map(|_| out_buf)
         }
-        Some("json") | None => Ok(buf),
-        Some(ext) => Err(Error::new(
-            ErrorKind::Unsupported,
-            format!("unsupported extension {}", ext),
-        )),
+        Buffer::PlainText(buf) => Ok(buf),
     }
     .and_then(DeserializerWithData::build);
 
@@ -197,29 +235,20 @@ impl TarEntriesIter {
 }
 
 impl Iterator for TarEntriesIter {
-    type Item = Result<(PathBuf, Vec<u8>), IOErr>;
+    type Item = Result<(PathBuf, Buffer), IOErr>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.with_mut(|slf| {
             loop {
                 match slf.entries.next() {
-                    Some(Ok(mut entry)) if entry.size() > 0 => {
-                        let mut buf = Vec::with_capacity(entry.size() as usize);
-
+                    Some(Ok(entry)) if entry.size() > 0 => {
                         let name = match entry.path().map(|path| slf.path.join(path)) {
                             Ok(name) => name,
                             Err(err) => break Some(Err(IOErr { file: None, err })),
                         };
+                        let size = entry.size();
 
-                        match entry.read_to_end(&mut buf) {
-                            Ok(_) => break Some(Ok((name, buf))),
-                            Err(err) => {
-                                break Some(Err(IOErr {
-                                    file: Some(name),
-                                    err,
-                                }))
-                            }
-                        }
+                        break Some(read_buffer(name, entry, size));
                     }
                     Some(Err(err)) => break Some(Err(IOErr { file: None, err })),
                     None => break None,
@@ -255,7 +284,7 @@ impl ZipEntriesIter {
 }
 
 impl Iterator for ZipEntriesIter {
-    type Item = Result<(PathBuf, Vec<u8>), IOErr>;
+    type Item = Result<(PathBuf, Buffer), IOErr>;
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.len, Some(self.len))
@@ -268,7 +297,7 @@ impl Iterator for ZipEntriesIter {
             }
 
             match self.archive.by_index(self.pos) {
-                Ok(mut zfile) => {
+                Ok(zfile) => {
                     self.pos += 1;
 
                     if zfile.is_dir() {
@@ -276,17 +305,9 @@ impl Iterator for ZipEntriesIter {
                     }
 
                     let name = self.path.join(zfile.mangled_name());
+                    let size = zfile.size();
 
-                    let mut buffer = Vec::with_capacity(zfile.size() as usize);
-                    match zfile.read_to_end(&mut buffer) {
-                        Ok(_s) => break Some(Ok((name, buffer))),
-                        Err(err) => {
-                            break Some(Err(IOErr {
-                                file: Some(name),
-                                err,
-                            }))
-                        }
-                    }
+                    break Some(read_buffer(name, zfile, size));
                 }
                 Err(err) => {
                     self.pos += 1;
@@ -298,5 +319,52 @@ impl Iterator for ZipEntriesIter {
                 }
             }
         }
+    }
+}
+
+fn read_buffer<T: std::io::Read>(
+    name: PathBuf,
+    r: T,
+    size: u64,
+) -> Result<(PathBuf, Buffer), IOErr> {
+    fn into_vec<T: std::io::Read>(mut rdr: T, size: u64) -> Result<Vec<u8>, std::io::Error> {
+        let mut buf = Vec::with_capacity(size as usize);
+        rdr.read_to_end(&mut buf)?;
+        Ok(buf)
+    }
+
+    match name.extension().and_then(|s| s.to_str()) {
+        Some("gz") => match into_vec(r, size) {
+            Ok(b) => Ok((name, Buffer::Gz(b))),
+            Err(err) => Err(IOErr {
+                file: Some(name),
+                err,
+            }),
+        },
+        Some("bz2") => match into_vec(r, size) {
+            Ok(b) => Ok((name, Buffer::Bz2(b))),
+            Err(err) => Err(IOErr {
+                file: Some(name),
+                err,
+            }),
+        },
+        Some("json") | None => match into_vec(r, size) {
+            Ok(b) => Ok((name, Buffer::PlainText(b))),
+            Err(err) => Err(IOErr {
+                file: Some(name),
+                err,
+            }),
+        },
+        Some(_) if is_filename_marketid(&name) => match into_vec(r, size) {
+            Ok(b) => Ok((name, Buffer::PlainText(b))),
+            Err(err) => Err(IOErr {
+                file: Some(name),
+                err,
+            }),
+        },
+        Some(_) => Err(IOErr {
+            file: Some(name),
+            err: Error::new(ErrorKind::Unsupported, "unsupported file type"),
+        }),
     }
 }
