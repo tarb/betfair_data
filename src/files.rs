@@ -27,13 +27,17 @@ use crate::mutable::file::File as MutFile;
 const NUM_BUFFERED: usize = 50;
 
 static MID_RXP: SyncOnceCell<Regex> = SyncOnceCell::new();
+// does the filename end in market_id
+// resources/PRO-1.170258213 == true
+// resources/1.170258213 == true
+// resources/.gitignore == false
 fn is_filename_marketid(p: &Path) -> bool {
     p.file_name()
         .map(|name| {
             let name = name.to_string_lossy();
 
             MID_RXP
-                .get_or_init(|| Regex::new(r"^\d{1}.\d{9}$").unwrap())
+                .get_or_init(|| Regex::new(r"^.*\d{1}.\d{9}$").unwrap())
                 .is_match(&name)
         })
         .unwrap_or(false)
