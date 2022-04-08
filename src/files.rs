@@ -37,7 +37,7 @@ fn is_filename_marketid(p: &Path) -> bool {
             let name = name.to_string_lossy();
 
             MID_RXP
-                .get_or_init(|| Regex::new(r"^.*\d{1}.\d{9}$").unwrap())
+                .get_or_init(|| Regex::new(r"^.*\d{1}\.\d{9}$").unwrap())
                 .is_match(&name)
         })
         .unwrap_or(false)
