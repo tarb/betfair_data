@@ -12,6 +12,7 @@
     generic_associated_types
 )]
 
+mod api;
 mod bflw;
 mod config;
 mod datetime;
@@ -55,8 +56,12 @@ static GLOBAL: MiMalloc = MiMalloc;
 fn betfair_data(py: Python, m: &PyModule) -> PyResult<()> {
     pyo3_log::init();
 
-    m.add_class::<Files>()?;
 
+    let api_mod = PyModule::new(py, "api")?;
+    api_mod.add_function(wrap_pyfunction!(api::login::login, api_mod)?)?;
+    m.add_submodule(api_mod)?;
+
+    m.add_class::<Files>()?;
     m.add_class::<File>()?;
     m.add_class::<PriceSize>()?;
     m.add_class::<Market>()?;

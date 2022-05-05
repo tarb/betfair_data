@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{array::TryFromSliceError, str};
 
-use serde::{de::Error, de::Visitor, Deserialize, Deserializer};
+use serde::{de::Error, de::Visitor, Deserialize, Deserializer, Serializer, Serialize};
 
 pub trait StringSetExtNeq {
     fn set_if_ne<S: Into<String> + AsRef<str>>(&mut self, s: S) -> bool;
@@ -137,3 +137,13 @@ impl<'de, const N: usize> Deserialize<'de> for FixedSizeString<N> {
             .map_err(Error::custom)
     }
 }
+
+impl<const N: usize> Serialize for FixedSizeString<N> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self)
+    }
+}
+

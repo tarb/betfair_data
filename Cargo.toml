@@ -28,6 +28,18 @@ staticvec = { version = "0.11.3", features = ["serde"] }
 bzip2-rs = { git = "https://github.com/paolobarbolini/bzip2-rs", features = ["rayon", "nightly"]}
 regex = "1"
 
+# asyncio
+pyo3-asyncio = { version = "0.16", features = ["tokio-runtime"] }
+tokio = "1.11"
+tokio-util = { version = "0.7", features = ["full"] }
+tokio-rustls = "0.23"
+reqwest = "0.11"
+bytes = "1.1"
+futures = "0.3"
+webpki-roots = "0.22"
+
+
+
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 mimalloc = { version = "*", default-features = false }
 
