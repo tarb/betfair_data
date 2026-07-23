@@ -9,3 +9,4 @@ __pycache__
 *.rs_ignore
 **/*.so
 **/.DS_Store
+venv/
