@@ -120,3 +120,15 @@ WARNING betfair_data file: data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/8/309855
 WARNING betfair_data file: data/2021_10_OctRacingAUPro.tar/PRO/2021/Oct/15/31001342/1.189124831.bz2 err: (JSON Parse Error) expected value at line 1335 column 1
 ```
 
+## How to Build
+
+```bash
+cargo build
+maturin build --release --out dist -i python3
+```
+
+Install the built package with
+
+```bash
+pip install dist/*.whl
+```
